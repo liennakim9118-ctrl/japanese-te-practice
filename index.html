@@ -970,10 +970,12 @@ function updatePreview() {
     if (!mBox.value.trim()) mBox.value = entry.m;
   }
   if (!c) { el.innerHTML = '<span style="color:#e53935">자동 활용 실패 — 기본형(사전형)인지 확인하세요.</span>'; return; }
+  const dup = allVerbs().some(v => v.dict.h === c.dict.h);
   let head;
-  if (entry && viaConj) head = `<span style="color:#3b5bdb;font-weight:700">🔄 기본형 인식</span> ${ruby(c.dict.k, c.dict.h)} (${entry.m}) · <b>${GROUP_NAME[c.group]}</b>`;
-  else if (entry)        head = `<span style="color:#2e7d32;font-weight:700">✓ 사전 확인</span> ${ruby(c.dict.k, c.dict.h)} (${entry.m}) · <b>${GROUP_NAME[c.group]}</b>`;
-  else                   head = `<span style="color:#e65100;font-weight:700">ⓘ 사전에 없는 동사</span> — 입력값으로 추가 · <b>${GROUP_NAME[c.group]}</b>`;
+  if (dup)                    head = `<span style="color:#e53935;font-weight:700">⚠️ 이미 있는 동사</span> ${ruby(c.dict.k, c.dict.h)} — 중복 추가 불가`;
+  else if (entry && viaConj)  head = `<span style="color:#3b5bdb;font-weight:700">🔄 기본형 인식</span> ${ruby(c.dict.k, c.dict.h)} (${entry.m}) · <b>${GROUP_NAME[c.group]}</b>`;
+  else if (entry)             head = `<span style="color:#2e7d32;font-weight:700">✓ 사전 확인</span> ${ruby(c.dict.k, c.dict.h)} (${entry.m}) · <b>${GROUP_NAME[c.group]}</b>`;
+  else                        head = `<span style="color:#e65100;font-weight:700">ⓘ 사전에 없는 동사</span> — 입력값으로 추가 · <b>${GROUP_NAME[c.group]}</b>`;
   el.innerHTML = head + `<br>ます: ${c.masu.h} ・ ない: ${c.nai.h} ・ た: ${c.ta.h} ・ <b>て: ${c.te.h}</b>`;
 }
 
@@ -982,6 +984,11 @@ function confirmAddVerb() {
   if (!dictH) { alert('기본형 히라가나를 입력해 주세요. (예: のむ)'); return; }
   if (!c) { alert('활용형을 자동 생성하지 못했어요.\n기본형(사전형)을 히라가나로 입력했는지 확인해 주세요. (예: のむ, たべる)'); return; }
   if (!meaning) { alert('의미를 입력해 주세요.'); return; }
+  // 중복 동사 차단 (기본+커스텀 통틀어 같은 기본형이 있으면 거부)
+  if (allVerbs().some(v => v.dict.h === c.dict.h)) {
+    alert(`'${c.dict.k}' (${c.dict.h}) 는 이미 목록에 있는 동사예요.\n중복으로 추가할 수 없습니다.`);
+    return;
+  }
   // 사전에 없으면 한 번 더 확인
   if (!entry && !confirm(`'${dictH}'는 내장 사전에 없는 동사예요.\n입력하신 내용(${GROUP_NAME[c.group]} · て형 ${c.te.h})으로 추가할까요?\n\n※ 그룹이 틀리면 '동사 그룹'에서 직접 선택하세요.`)) return;
 
