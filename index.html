@@ -452,14 +452,14 @@ ruby rt {
   <div class="modal">
     <h2>＋ 내 동사 관리</h2>
 
-    <div class="section-title">새 동사 추가 (기본형만 넣으면 자동 변환)</div>
+    <div class="section-title">새 동사 추가 (기본형 입력 → 사전 자동완성·검증)</div>
     <div class="form-group">
       <label>기본형 — 히라가나 (필수, 예: のむ)</label>
       <input id="a-dict-h" placeholder="のむ　← 사전형(기본형)으로 입력">
     </div>
     <div class="form-group">
-      <label>기본형 — 한자 (선택, 예: 飲む)</label>
-      <input id="a-dict-k" placeholder="飲む　← 없으면 비워도 됨">
+      <label>기본형 — 한자 (사전에 있으면 자동완성, 예: 飲む)</label>
+      <input id="a-dict-k" placeholder="飲む　← 자동완성 / 직접 입력도 가능">
     </div>
     <div class="form-group">
       <label>의미 (한국어, 필수)</label>
@@ -879,23 +879,93 @@ function conjugate(dictH, dictK, groupOpt) {
 
 const GROUP_NAME = ['', '1그룹', '2그룹', '3그룹'];
 
-function updatePreview() {
+// ── 내장 동사 사전 (읽기 → {k:한자, g:그룹, m:뜻}) : 추가 시 자동 검증·한자완성·그룹판별 ──
+// ※ 읽기가 같은 동사는 가장 흔한 쪽으로 등록 (예: きる=着る, かえる=帰る). 드문 동의어는 그룹 수동 선택.
+const VERB_DICT = {
+  // 2그룹 (る동사)
+  'みる':{k:'見る',g:2,m:'보다'}, 'たべる':{k:'食べる',g:2,m:'먹다'}, 'ねる':{k:'寝る',g:2,m:'자다'},
+  'おきる':{k:'起きる',g:2,m:'일어나다'}, 'きる':{k:'着る',g:2,m:'입다'}, 'でる':{k:'出る',g:2,m:'나오다/나가다'},
+  'いれる':{k:'入れる',g:2,m:'넣다'}, 'あける':{k:'開ける',g:2,m:'열다'}, 'しめる':{k:'閉める',g:2,m:'닫다'},
+  'おしえる':{k:'教える',g:2,m:'가르치다'}, 'おぼえる':{k:'覚える',g:2,m:'외우다'}, 'わすれる':{k:'忘れる',g:2,m:'잊다'},
+  'かりる':{k:'借りる',g:2,m:'빌리다'}, 'かんがえる':{k:'考える',g:2,m:'생각하다'}, 'でかける':{k:'出かける',g:2,m:'외출하다'},
+  'つかれる':{k:'疲れる',g:2,m:'지치다'}, 'なれる':{k:'慣れる',g:2,m:'익숙해지다'}, 'あつめる':{k:'集める',g:2,m:'모으다'},
+  'きめる':{k:'決める',g:2,m:'정하다'}, 'はじめる':{k:'始める',g:2,m:'시작하다'}, 'やめる':{k:'辞める',g:2,m:'그만두다'},
+  'つける':{k:'付ける',g:2,m:'켜다/붙이다'}, 'かける':{k:'掛ける',g:2,m:'걸다'}, 'みせる':{k:'見せる',g:2,m:'보여주다'},
+  'うける':{k:'受ける',g:2,m:'받다'}, 'すてる':{k:'捨てる',g:2,m:'버리다'}, 'しらべる':{k:'調べる',g:2,m:'조사하다'},
+  'たりる':{k:'足りる',g:2,m:'충분하다'}, 'できる':{k:'できる',g:2,m:'할 수 있다'}, 'にげる':{k:'逃げる',g:2,m:'도망치다'},
+  'ほめる':{k:'褒める',g:2,m:'칭찬하다'}, 'たすける':{k:'助ける',g:2,m:'돕다/구하다'}, 'くらべる':{k:'比べる',g:2,m:'비교하다'},
+  'こたえる':{k:'答える',g:2,m:'대답하다'}, 'かたづける':{k:'片付ける',g:2,m:'정리하다'},
+  // 1그룹 (う동사)
+  'かく':{k:'書く',g:1,m:'쓰다'}, 'きく':{k:'聞く',g:1,m:'듣다/묻다'}, 'いく':{k:'行く',g:1,m:'가다'},
+  'あるく':{k:'歩く',g:1,m:'걷다'}, 'およぐ':{k:'泳ぐ',g:1,m:'수영하다'}, 'いそぐ':{k:'急ぐ',g:1,m:'서두르다'},
+  'はなす':{k:'話す',g:1,m:'말하다'}, 'かす':{k:'貸す',g:1,m:'빌려주다'}, 'さがす':{k:'探す',g:1,m:'찾다'},
+  'だす':{k:'出す',g:1,m:'내다'}, 'けす':{k:'消す',g:1,m:'끄다/지우다'}, 'おす':{k:'押す',g:1,m:'밀다'},
+  'なおす':{k:'直す',g:1,m:'고치다'}, 'わたす':{k:'渡す',g:1,m:'건네다'}, 'まつ':{k:'待つ',g:1,m:'기다리다'},
+  'もつ':{k:'持つ',g:1,m:'들다/가지다'}, 'たつ':{k:'立つ',g:1,m:'서다'}, 'かう':{k:'買う',g:1,m:'사다'},
+  'あう':{k:'会う',g:1,m:'만나다'}, 'ならう':{k:'習う',g:1,m:'배우다'}, 'つかう':{k:'使う',g:1,m:'사용하다'},
+  'うたう':{k:'歌う',g:1,m:'노래하다'}, 'もらう':{k:'もらう',g:1,m:'받다'}, 'すう':{k:'吸う',g:1,m:'들이마시다'},
+  'いう':{k:'言う',g:1,m:'말하다'}, 'わらう':{k:'笑う',g:1,m:'웃다'}, 'てつだう':{k:'手伝う',g:1,m:'돕다'},
+  'あらう':{k:'洗う',g:1,m:'씻다'}, 'はらう':{k:'払う',g:1,m:'지불하다'}, 'ちがう':{k:'違う',g:1,m:'다르다'},
+  'むかう':{k:'向かう',g:1,m:'향하다'}, 'のむ':{k:'飲む',g:1,m:'마시다'}, 'よむ':{k:'読む',g:1,m:'읽다'},
+  'やすむ':{k:'休む',g:1,m:'쉬다'}, 'すむ':{k:'住む',g:1,m:'살다'}, 'あそぶ':{k:'遊ぶ',g:1,m:'놀다'},
+  'よぶ':{k:'呼ぶ',g:1,m:'부르다'}, 'とぶ':{k:'飛ぶ',g:1,m:'날다'}, 'しぬ':{k:'死ぬ',g:1,m:'죽다'},
+  'のる':{k:'乗る',g:1,m:'타다'}, 'はしる':{k:'走る',g:1,m:'달리다'}, 'つくる':{k:'作る',g:1,m:'만들다'},
+  'かえる':{k:'帰る',g:1,m:'돌아가다'}, 'はいる':{k:'入る',g:1,m:'들어가다'}, 'わかる':{k:'分かる',g:1,m:'이해하다'},
+  'とる':{k:'取る',g:1,m:'잡다/찍다'}, 'うる':{k:'売る',g:1,m:'팔다'}, 'ある':{k:'ある',g:1,m:'있다(사물)'},
+  'なる':{k:'なる',g:1,m:'되다'}, 'おわる':{k:'終わる',g:1,m:'끝나다'}, 'はじまる':{k:'始まる',g:1,m:'시작되다'},
+  'のぼる':{k:'登る',g:1,m:'오르다'}, 'おくる':{k:'送る',g:1,m:'보내다'}, 'まがる':{k:'曲がる',g:1,m:'돌다'},
+  'がんばる':{k:'頑張る',g:1,m:'분발하다'}, 'しる':{k:'知る',g:1,m:'알다'}, 'すわる':{k:'座る',g:1,m:'앉다'},
+  'もどる':{k:'戻る',g:1,m:'돌아오다'}, 'ふる':{k:'降る',g:1,m:'내리다(비/눈)'}, 'こまる':{k:'困る',g:1,m:'곤란하다'},
+  'ひく':{k:'引く',g:1,m:'끌다/(악기)켜다'}, 'つく':{k:'着く',g:1,m:'도착하다'}, 'なく':{k:'泣く',g:1,m:'울다'},
+  'うごく':{k:'動く',g:1,m:'움직이다'}, 'はたらく':{k:'働く',g:1,m:'일하다'}, 'わたる':{k:'渡る',g:1,m:'건너다'},
+  'のこる':{k:'残る',g:1,m:'남다'}, 'おこる':{k:'怒る',g:1,m:'화내다'}, 'さわる':{k:'触る',g:1,m:'만지다'},
+  // 3그룹 (불규칙·する복합)
+  'する':{k:'する',g:3,m:'하다'}, 'くる':{k:'来る',g:3,m:'오다'},
+  'べんきょうする':{k:'勉強する',g:3,m:'공부하다'}, 'さんぽする':{k:'散歩する',g:3,m:'산책하다'},
+  'りょうりする':{k:'料理する',g:3,m:'요리하다'}, 'うんどうする':{k:'運動する',g:3,m:'운동하다'},
+  'れんしゅうする':{k:'練習する',g:3,m:'연습하다'}, 'でんわする':{k:'電話する',g:3,m:'전화하다'},
+  'けっこんする':{k:'結婚する',g:3,m:'결혼하다'}, 'よやくする':{k:'予約する',g:3,m:'예약하다'},
+  'せつめいする':{k:'説明する',g:3,m:'설명하다'}, 'しんぱいする':{k:'心配する',g:3,m:'걱정하다'},
+};
+const lookupVerb = h => VERB_DICT[h] || null;
+
+// 사전 조회 → 한자/그룹 자동 해석
+function resolveAdd() {
   const g = id => document.getElementById(id).value.trim();
-  const dictH = g('a-dict-h'), dictK = g('a-dict-k') || g('a-dict-h');
+  const dictH = g('a-dict-h');
+  const entry = lookupVerb(dictH);
+  const dictK = g('a-dict-k') || (entry ? entry.k : '') || dictH;
+  const sel = document.getElementById('a-group').value;
+  const groupOpt = sel !== 'auto' ? sel : (entry ? String(entry.g) : 'auto');
+  const meaning = g('a-meaning') || (entry ? entry.m : '');
+  return { dictH, dictK, meaning, entry, c: conjugate(dictH, dictK, groupOpt) };
+}
+
+function updatePreview() {
   const el = document.getElementById('a-preview');
+  const dictH = document.getElementById('a-dict-h').value.trim();
   if (!dictH) { el.innerHTML = ''; return; }
-  const c = conjugate(dictH, dictK, document.getElementById('a-group').value);
+  const { entry, c } = resolveAdd();
+  // 사전에 있으면 한자/의미 빈 칸 자동 완성
+  if (entry) {
+    const kBox = document.getElementById('a-dict-k'), mBox = document.getElementById('a-meaning');
+    if (!kBox.value.trim()) kBox.value = entry.k;
+    if (!mBox.value.trim()) mBox.value = entry.m;
+  }
   if (!c) { el.innerHTML = '<span style="color:#e53935">자동 활용 실패 — 기본형(사전형)인지 확인하세요.</span>'; return; }
-  el.innerHTML = `<b>${GROUP_NAME[c.group]}</b> 자동 활용<br>` +
-    `ます: ${c.masu.h} ・ ない: ${c.nai.h} ・ た: ${c.ta.h} ・ <b>て: ${c.te.h}</b>`;
+  const head = entry
+    ? `<span style="color:#2e7d32;font-weight:700">✓ 사전 확인</span> ${ruby(c.dict.k, c.dict.h)} (${entry.m}) · <b>${GROUP_NAME[c.group]}</b>`
+    : `<span style="color:#e65100;font-weight:700">ⓘ 사전에 없는 동사</span> — 입력값으로 추가 · <b>${GROUP_NAME[c.group]}</b>`;
+  el.innerHTML = head + `<br>ます: ${c.masu.h} ・ ない: ${c.nai.h} ・ た: ${c.ta.h} ・ <b>て: ${c.te.h}</b>`;
 }
 
 function confirmAddVerb() {
-  const g = id => document.getElementById(id).value.trim();
-  const dictH = g('a-dict-h'), dictK = g('a-dict-k') || dictH, meaning = g('a-meaning');
-  if (!dictH || !meaning) { alert('기본형 히라가나와 의미는 필수입니다.'); return; }
-  const c = conjugate(dictH, dictK, document.getElementById('a-group').value);
+  const { dictH, meaning, entry, c } = resolveAdd();
+  if (!dictH) { alert('기본형 히라가나를 입력해 주세요. (예: のむ)'); return; }
   if (!c) { alert('활용형을 자동 생성하지 못했어요.\n기본형(사전형)을 히라가나로 입력했는지 확인해 주세요. (예: のむ, たべる)'); return; }
+  if (!meaning) { alert('의미를 입력해 주세요.'); return; }
+  // 사전에 없으면 한 번 더 확인
+  if (!entry && !confirm(`'${dictH}'는 내장 사전에 없는 동사예요.\n입력하신 내용(${GROUP_NAME[c.group]} · て형 ${c.te.h})으로 추가할까요?\n\n※ 그룹이 틀리면 '동사 그룹'에서 직접 선택하세요.`)) return;
 
   customVerbs.push({ dict:c.dict, masu:c.masu, nai:c.nai, ta:c.ta, te:c.te, meaning, group:c.group, custom:true });
   localStorage.setItem('jp_custom_verbs', JSON.stringify(customVerbs));
@@ -904,7 +974,7 @@ function confirmAddVerb() {
   document.getElementById('a-group').value = 'auto';
   updatePreview();
   renderVerbList();
-  alert(`"${c.dict.k}" 추가 완료! (${GROUP_NAME[c.group]} · て형 ${c.te.h})`);
+  alert(`"${c.dict.k}" 추가 완료! (${GROUP_NAME[c.group]} · て형 ${c.te.h})${entry ? '\n✓ 사전에서 확인된 동사예요.' : ''}`);
 }
 
 // ── 동사 목록: 기본 동사 + 내 동사 모두 (틀린 순) ──
