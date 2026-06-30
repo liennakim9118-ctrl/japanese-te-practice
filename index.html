@@ -590,10 +590,10 @@ const DERIVATIVES = [
 ];
 
 const GIVEN_FORMS = [
-  { id:'dict',  label:'기본형' },
-  { id:'masu',  label:'ます형' },
-  { id:'nai',   label:'ない형' },
-  { id:'ta',    label:'た형' },
+  { id:'dict',  label:'기본형', desc:'~한다' },
+  { id:'masu',  label:'ます형', desc:'~합니다' },
+  { id:'nai',   label:'ない형', desc:'~하지 않는다' },
+  { id:'ta',    label:'た형',   desc:'~했다' },
   { id:'deriv', label:'て파생형' },
 ];
 
@@ -658,14 +658,14 @@ function newQuestion() {
     if (src) {
       givenKanji = verb.te.k + src.suffix;
       givenKana  = verb.te.h + src.suffix;
-      givenLabel = src.label + '형';
+      givenLabel = `${src.label}형 (${src.meaning})`;
     } else {
-      givenKanji = verb.dict.k; givenKana = verb.dict.h; givenLabel = '기본형';
+      givenKanji = verb.dict.k; givenKana = verb.dict.h; givenLabel = '기본형 (~한다)';
     }
   } else {
     givenKanji = verb[givenType.id].k;
     givenKana  = verb[givenType.id].h;
-    givenLabel = givenType.label;
+    givenLabel = givenType.desc ? `${givenType.label} (${givenType.desc})` : givenType.label;
   }
 
   cur = { verb, target };
@@ -957,7 +957,7 @@ function newReviewQuestion() {
   cur = { verb, target };
 
   document.getElementById('review-banner-text').textContent = `🔖 복습 모드 · 남은 문제 ${reviewQueue.length}개`;
-  document.getElementById('given-form-label').textContent = '기본형';
+  document.getElementById('given-form-label').textContent = '기본형 (~한다)';
   document.getElementById('verb-display').innerHTML = ruby(verb.dict.k, verb.dict.h);
   document.getElementById('question-text').innerHTML =
     `<b>${verb.meaning}</b>을(를) 뜻하는 동사를<br>` +
