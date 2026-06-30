@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#3b5bdb">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="て형 연습">
+<link rel="manifest" href="manifest.json">
+<title>일본어 て형 연습</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+body {
+  font-family: 'Segoe UI', 'Noto Sans KR', sans-serif;
+  background: #f0f4f8;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ── Header ── */
+.header {
+  background: #3b5bdb;
+  color: white;
+  padding: 12px 20px;
+  padding-top: calc(12px + env(safe-area-inset-top));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 8px rgba(59,91,219,0.3);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.header h1 { font-size: clamp(15px, 4vw, 18px); font-weight: 700; letter-spacing: -0.3px; }
+.score-display {
+  font-size: clamp(11px, 3vw, 13px);
+  opacity: 0.95;
+  background: rgba(255,255,255,0.18);
+  padding: 5px 12px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+/* ── Main scroll area ── */
+.main {
+  flex: 1;
+  padding: 16px 14px;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  max-width: 580px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ── Cards ── */
+.card {
+  background: white;
+  border-radius: 18px;
+  padding: clamp(18px, 5vw, 26px) clamp(16px, 5vw, 24px);
+  box-shadow: 0 2px 14px rgba(0,0,0,0.07);
+  margin-bottom: 12px;
+}
+
+/* Given form badge */
+.form-badge {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3b5bdb;
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  letter-spacing: 0.3px;
+}
+
+/* Verb display */
+.verb-display {
+  font-size: clamp(38px, 12vw, 54px);
+  text-align: center;
+  margin: 6px 0 16px;
+  line-height: 2.4;
+  font-family: 'Noto Sans JP', 'Yu Gothic', 'Meiryo', sans-serif;
+  word-break: keep-all;
+}
+ruby rt {
+  font-size: clamp(11px, 3vw, 14px);
+  color: #888;
+  font-family: 'Noto Sans JP', 'Yu Gothic', sans-serif;
+}
+
+/* Question */
+.question-text {
+  font-size: clamp(14px, 3.8vw, 16px);
+  color: #444;
+  line-height: 1.75;
+  margin-bottom: 16px;
+}
+.target-badge {
+  display: inline-block;
+  background: #fff3e0;
+  color: #d84315;
+  border-radius: 7px;
+  padding: 4px 11px;
+  font-size: clamp(12px, 3.5vw, 14px);
+  font-weight: 700;
+}
+
+/* ── Input row ── */
+.input-row { display: flex; gap: 10px; }
+
+.answer-input {
+  flex: 1;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 14px 16px;
+  /* 16px 이상이어야 iOS에서 자동 확대 방지 */
+  font-size: 18px;
+  font-family: 'Noto Sans JP', 'Yu Gothic', sans-serif;
+  outline: none;
+  transition: border-color 0.2s;
+  background: #fafafa;
+  color: #222;
+  min-height: 54px;
+  /* 모바일 자동완성/수정 비활성화 */
+  -webkit-user-modify: read-write-plaintext-only;
+}
+.answer-input:focus { border-color: #3b5bdb; background: white; }
+.answer-input.correct { border-color: #43a047; background: #f1f8e9; }
+.answer-input.wrong   { border-color: #e53935; background: #fff5f5; }
+.answer-input:disabled { opacity: 0.75; }
+
+.submit-btn {
+  background: #3b5bdb;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 14px 18px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 54px;
+  min-width: 64px;
+  transition: background 0.15s, transform 0.1s;
+  touch-action: manipulation;
+}
+.submit-btn:active { background: #2f46ad; transform: scale(0.97); }
+
+/* ── Result ── */
+.result-card {
+  border-radius: 16px;
+  padding: clamp(16px, 4vw, 22px);
+  margin-bottom: 12px;
+  display: none;
+}
+.result-card.correct { background: #e8f5e9; border: 1.5px solid #66bb6a; }
+.result-card.wrong   { background: #fff5f5; border: 1.5px solid #ef9a9a; }
+
+.result-title { font-size: clamp(15px, 4vw, 17px); font-weight: 700; margin-bottom: 10px; }
+.result-title.correct { color: #2e7d32; }
+.result-title.wrong   { color: #c62828; }
+
+.correct-answer {
+  font-size: clamp(22px, 6vw, 30px);
+  font-family: 'Noto Sans JP', 'Yu Gothic', sans-serif;
+  margin: 6px 0 12px;
+  line-height: 2.2;
+}
+
+.explanation {
+  font-size: clamp(13px, 3.5vw, 14.5px);
+  color: #555;
+  line-height: 1.8;
+  border-top: 1px solid rgba(0,0,0,0.07);
+  padding-top: 10px;
+  margin-top: 4px;
+}
+.explanation b { color: #333; }
+.note-warn { color: #e65100; font-weight: 600; margin-top: 6px; display: block; }
+
+/* ── Next button ── */
+.next-btn {
+  width: 100%;
+  background: #3b5bdb;
+  color: white;
+  border: none;
+  border-radius: 14px;
+  padding: 17px;
+  font-size: clamp(14px, 4vw, 16px);
+  font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 12px;
+  min-height: 54px;
+  touch-action: manipulation;
+  transition: background 0.15s, transform 0.1s;
+}
+.next-btn:active { background: #2f46ad; transform: scale(0.98); }
+
+/* ── Bottom bar ── */
+.bottom-bar { display: flex; gap: 10px; }
+.icon-btn {
+  flex: 1;
+  background: white;
+  border: 1.5px solid #e8e8e8;
+  border-radius: 12px;
+  padding: 13px 6px;
+  font-size: clamp(11px, 3vw, 13px);
+  cursor: pointer;
+  color: #555;
+  font-weight: 600;
+  min-height: 48px;
+  touch-action: manipulation;
+  transition: background 0.1s, transform 0.1s;
+}
+.icon-btn:active { background: #f0f0f0; transform: scale(0.97); }
+
+/* ── Modals ── */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 100;
+  align-items: flex-end;       /* 모바일: 아래에서 올라오는 sheet */
+  justify-content: center;
+  padding: 0;
+}
+.modal-overlay.open { display: flex; }
+
+.modal {
+  background: white;
+  border-radius: 24px 24px 0 0;
+  padding: 28px 22px;
+  padding-bottom: calc(28px + env(safe-area-inset-bottom));
+  width: 100%;
+  max-width: 600px;
+  max-height: 88dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  animation: slideUp 0.25s ease;
+}
+
+/* 태블릿/데스크톱: 가운데 팝업 */
+@media (min-width: 600px) {
+  .modal-overlay { align-items: center; padding: 20px; }
+  .modal { border-radius: 20px; max-height: 85vh; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(30px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* drag handle */
+.modal::before {
+  content: '';
+  display: block;
+  width: 40px;
+  height: 4px;
+  background: #ddd;
+  border-radius: 2px;
+  margin: -8px auto 20px;
+}
+@media (min-width: 600px) { .modal::before { display: none; } }
+
+.modal h2 { font-size: clamp(16px, 4vw, 18px); margin-bottom: 18px; color: #222; }
+
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; font-size: 12px; color: #777; margin-bottom: 5px; font-weight: 700; letter-spacing: 0.3px; }
+.form-group input {
+  width: 100%;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 16px;   /* iOS 줌 방지 */
+  font-family: 'Noto Sans JP', 'Yu Gothic', sans-serif;
+  outline: none;
+  -webkit-appearance: none;
+}
+.form-group input:focus { border-color: #3b5bdb; }
+.form-group input + input { margin-top: 6px; }
+
+.modal-btns { display: flex; gap: 10px; margin-top: 20px; }
+.modal-btns button {
+  flex: 1;
+  padding: 15px;
+  border-radius: 12px;
+  border: none;
+  font-size: clamp(13px, 3.5vw, 15px);
+  font-weight: 700;
+  cursor: pointer;
+  min-height: 50px;
+  touch-action: manipulation;
+}
+.btn-cancel  { background: #eee; color: #555; }
+.btn-confirm { background: #3b5bdb; color: white; }
+.btn-confirm:active { background: #2f46ad; }
+
+/* Stats */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.stat-box { background: #f5f7ff; border-radius: 12px; padding: 14px 10px; text-align: center; }
+.stat-num { font-size: clamp(24px, 7vw, 32px); font-weight: 700; color: #3b5bdb; }
+.stat-label { font-size: 11px; color: #888; margin-top: 3px; }
+
+.wrong-row { display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid #f0f0f0; font-size:clamp(13px,3.5vw,15px); }
+.wrong-count { color: #e53935; font-weight: 700; font-size: 13px; }
+
+/* Settings checkboxes */
+.check-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  font-size: clamp(13px, 3.5vw, 15px);
+  padding: 4px 0;
+  min-height: 36px;
+}
+.check-label input[type=checkbox] {
+  width: 20px; height: 20px;
+  accent-color: #3b5bdb;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.check-sub { color: #888; font-size: clamp(11px, 3vw, 13px); }
+.section-title { font-size: 13px; font-weight: 700; color: #555; margin: 18px 0 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🇯🇵 て형 연습</h1>
+  <div class="score-display" id="score-display">정답: 0 / 0</div>
+</div>
+
+<div class="main">
+
+  <!-- Problem Card -->
+  <div class="card" id="problem-card">
+    <span class="form-badge" id="given-form-label">기본형</span>
+    <div class="verb-display" id="verb-display"></div>
+    <div class="question-text" id="question-text"></div>
+    <div class="input-row">
+      <input
+        type="text"
+        class="answer-input"
+        id="answer-input"
+        placeholder="히라가나 또는 한자로 입력..."
+        autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+      >
+      <button class="submit-btn" id="submit-btn">확인</button>
+    </div>
+  </div>
+
+  <!-- Result Card -->
+  <div class="result-card" id="result-card">
+    <div class="result-title" id="result-title"></div>
+    <div id="result-body"></div>
+  </div>
+
+  <!-- Next button -->
+  <button class="next-btn" id="next-btn" style="display:none">다음 문제 →</button>
+
+  <!-- Bottom bar -->
+  <div class="bottom-bar">
+    <button class="icon-btn" onclick="openAddVerb()">＋ 동사 추가</button>
+    <button class="icon-btn" onclick="openStats()">📊 통계</button>
+    <button class="icon-btn" onclick="openSettings()">⚙️ 설정</button>
+  </div>
+
+</div>
+
+<!-- ───── Add Verb Modal ───── -->
+<div class="modal-overlay" id="modal-add">
+  <div class="modal">
+    <h2>새 동사 추가</h2>
+    <div class="form-group">
+      <label>기본형 — 한자 (예: 飲む)</label>
+      <input id="a-dict-k" placeholder="飲む　　← 한자 없으면 히라가나">
+    </div>
+    <div class="form-group">
+      <label>기본형 발음 — 히라가나 (필수, 예: のむ)</label>
+      <input id="a-dict-h" placeholder="のむ">
+    </div>
+    <div class="form-group">
+      <label>て형 발음 — 히라가나 (필수, 예: のんで)</label>
+      <input id="a-te-h" placeholder="のんで">
+    </div>
+    <div class="form-group">
+      <label>て형 — 한자 (예: 飲んで)</label>
+      <input id="a-te-k" placeholder="飲んで　　← 없으면 비워도 됨">
+    </div>
+    <div class="form-group">
+      <label>ます형 — 한자 / 히라가나</label>
+      <input id="a-masu-k" placeholder="飲みます">
+      <input id="a-masu-h" placeholder="のみます">
+    </div>
+    <div class="form-group">
+      <label>ない형 — 한자 / 히라가나</label>
+      <input id="a-nai-k" placeholder="飲まない">
+      <input id="a-nai-h" placeholder="のまない">
+    </div>
+    <div class="form-group">
+      <label>た형 — 한자 / 히라가나</label>
+      <input id="a-ta-k" placeholder="飲んだ">
+      <input id="a-ta-h" placeholder="のんだ">
+    </div>
+    <div class="form-group">
+      <label>의미 (한국어, 필수)</label>
+      <input id="a-meaning" placeholder="마시다" style="font-family:inherit">
+    </div>
+    <div class="form-group">
+      <label>특이사항 (선택, 예: 불규칙 て형)</label>
+      <input id="a-note" placeholder="없으면 비워도 됨" style="font-family:inherit">
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modal-add')">취소</button>
+      <button class="btn-confirm" onclick="confirmAddVerb()">추가</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───── Stats Modal ───── -->
+<div class="modal-overlay" id="modal-stats">
+  <div class="modal">
+    <h2>📊 학습 통계</h2>
+    <div class="stats-grid">
+      <div class="stat-box"><div class="stat-num" id="st-total">0</div><div class="stat-label">총 문제</div></div>
+      <div class="stat-box"><div class="stat-num" id="st-correct">0</div><div class="stat-label">정답</div></div>
+      <div class="stat-box"><div class="stat-num" id="st-rate">0%</div><div class="stat-label">정답률</div></div>
+      <div class="stat-box"><div class="stat-num" id="st-streak">0</div><div class="stat-label">연속 정답</div></div>
+    </div>
+    <div id="wrong-list"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modal-stats')">닫기</button>
+      <button class="btn-confirm" style="background:#e53935" onclick="resetStats()">초기화</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───── Settings Modal ───── -->
+<div class="modal-overlay" id="modal-settings">
+  <div class="modal">
+    <h2>⚙️ 설정</h2>
+    <div class="section-title">연습할 파생 표현</div>
+    <div id="deriv-checks"></div>
+    <div class="section-title">주어진 형태 (문제 제시 방식)</div>
+    <div id="given-checks"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modal-settings')">취소</button>
+      <button class="btn-confirm" onclick="saveSettings()">저장 후 새 문제</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// VERB DATA
+// ═══════════════════════════════════════════════════
+const BASE_VERBS = [
+  // ── Group 2 (る동사) ──
+  { dict:{k:'見る',h:'みる'},        masu:{k:'見ます',h:'みます'},        nai:{k:'見ない',h:'みない'},        ta:{k:'見た',h:'みた'},        te:{k:'見て',h:'みて'},        meaning:'보다',             group:2 },
+  { dict:{k:'食べる',h:'たべる'},     masu:{k:'食べます',h:'たべます'},     nai:{k:'食べない',h:'たべない'},     ta:{k:'食べた',h:'たべた'},     te:{k:'食べて',h:'たべて'},     meaning:'먹다',             group:2 },
+  { dict:{k:'起きる',h:'おきる'},     masu:{k:'起きます',h:'おきます'},     nai:{k:'起きない',h:'おきない'},     ta:{k:'起きた',h:'おきた'},     te:{k:'起きて',h:'おきて'},     meaning:'일어나다',         group:2 },
+  { dict:{k:'寝る',h:'ねる'},         masu:{k:'寝ます',h:'ねます'},         nai:{k:'寝ない',h:'ねない'},         ta:{k:'寝た',h:'ねた'},         te:{k:'寝て',h:'ねて'},         meaning:'자다',             group:2 },
+  { dict:{k:'着る',h:'きる'},         masu:{k:'着ます',h:'きます'},         nai:{k:'着ない',h:'きない'},         ta:{k:'着た',h:'きた'},         te:{k:'着て',h:'きて'},         meaning:'입다',             group:2 },
+  { dict:{k:'開ける',h:'あける'},     masu:{k:'開けます',h:'あけます'},     nai:{k:'開けない',h:'あけない'},     ta:{k:'開けた',h:'あけた'},     te:{k:'開けて',h:'あけて'},     meaning:'열다',             group:2 },
+  { dict:{k:'閉める',h:'しめる'},     masu:{k:'閉めます',h:'しめます'},     nai:{k:'閉めない',h:'しめない'},     ta:{k:'閉めた',h:'しめた'},     te:{k:'閉めて',h:'しめて'},     meaning:'닫다',             group:2 },
+  { dict:{k:'教える',h:'おしえる'},   masu:{k:'教えます',h:'おしえます'},   nai:{k:'教えない',h:'おしえない'},   ta:{k:'教えた',h:'おしえた'},   te:{k:'教えて',h:'おしえて'},   meaning:'가르치다',         group:2 },
+  { dict:{k:'覚える',h:'おぼえる'},   masu:{k:'覚えます',h:'おぼえます'},   nai:{k:'覚えない',h:'おぼえない'},   ta:{k:'覚えた',h:'おぼえた'},   te:{k:'覚えて',h:'おぼえて'},   meaning:'기억하다/외우다',  group:2 },
+  { dict:{k:'忘れる',h:'わすれる'},   masu:{k:'忘れます',h:'わすれます'},   nai:{k:'忘れない',h:'わすれない'},   ta:{k:'忘れた',h:'わすれた'},   te:{k:'忘れて',h:'わすれて'},   meaning:'잊다',             group:2 },
+  { dict:{k:'借りる',h:'かりる'},     masu:{k:'借ります',h:'かります'},     nai:{k:'借りない',h:'かりない'},     ta:{k:'借りた',h:'かりた'},     te:{k:'借りて',h:'かりて'},     meaning:'빌리다',           group:2 },
+  { dict:{k:'考える',h:'かんがえる'}, masu:{k:'考えます',h:'かんがえます'}, nai:{k:'考えない',h:'かんがえない'}, ta:{k:'考えた',h:'かんがえた'}, te:{k:'考えて',h:'かんがえて'}, meaning:'생각하다',         group:2 },
+  { dict:{k:'出かける',h:'でかける'}, masu:{k:'出かけます',h:'でかけます'}, nai:{k:'出かけない',h:'でかけない'}, ta:{k:'出かけた',h:'でかけた'}, te:{k:'出かけて',h:'でかけて'}, meaning:'외출하다',         group:2 },
+
+  // ── Group 1 (う동사) ──
+  { dict:{k:'書く',h:'かく'},         masu:{k:'書きます',h:'かきます'},     nai:{k:'書かない',h:'かかない'},     ta:{k:'書いた',h:'かいた'},     te:{k:'書いて',h:'かいて'},     meaning:'쓰다',             group:1 },
+  { dict:{k:'聞く',h:'きく'},         masu:{k:'聞きます',h:'ききます'},     nai:{k:'聞かない',h:'きかない'},     ta:{k:'聞いた',h:'きいた'},     te:{k:'聞いて',h:'きいて'},     meaning:'듣다/묻다',        group:1 },
+  { dict:{k:'歩く',h:'あるく'},       masu:{k:'歩きます',h:'あるきます'},   nai:{k:'歩かない',h:'あるかない'},   ta:{k:'歩いた',h:'あるいた'},   te:{k:'歩いて',h:'あるいて'},   meaning:'걷다',             group:1 },
+  { dict:{k:'行く',h:'いく'},         masu:{k:'行きます',h:'いきます'},     nai:{k:'行かない',h:'いかない'},     ta:{k:'行った',h:'いった'},     te:{k:'行って',h:'いって'},     meaning:'가다',             group:1, note:'⚠️ 불규칙 て형: いいて → いって' },
+  { dict:{k:'泳ぐ',h:'およぐ'},       masu:{k:'泳ぎます',h:'およぎます'},   nai:{k:'泳がない',h:'およがない'},   ta:{k:'泳いだ',h:'およいだ'},   te:{k:'泳いで',h:'およいで'},   meaning:'수영하다',         group:1 },
+  { dict:{k:'話す',h:'はなす'},       masu:{k:'話します',h:'はなします'},   nai:{k:'話さない',h:'はなさない'},   ta:{k:'話した',h:'はなした'},   te:{k:'話して',h:'はなして'},   meaning:'말하다',           group:1 },
+  { dict:{k:'貸す',h:'かす'},         masu:{k:'貸します',h:'かします'},     nai:{k:'貸さない',h:'かさない'},     ta:{k:'貸した',h:'かした'},     te:{k:'貸して',h:'かして'},     meaning:'빌려주다',         group:1 },
+  { dict:{k:'探す',h:'さがす'},       masu:{k:'探します',h:'さがします'},   nai:{k:'探さない',h:'さがさない'},   ta:{k:'探した',h:'さがした'},   te:{k:'探して',h:'さがして'},   meaning:'찾다',             group:1 },
+  { dict:{k:'待つ',h:'まつ'},         masu:{k:'待ちます',h:'まちます'},     nai:{k:'待たない',h:'またない'},     ta:{k:'待った',h:'まった'},     te:{k:'待って',h:'まって'},     meaning:'기다리다',         group:1 },
+  { dict:{k:'持つ',h:'もつ'},         masu:{k:'持ちます',h:'もちます'},     nai:{k:'持たない',h:'もたない'},     ta:{k:'持った',h:'もった'},     te:{k:'持って',h:'もって'},     meaning:'들다/가지다',      group:1 },
+  { dict:{k:'買う',h:'かう'},         masu:{k:'買います',h:'かいます'},     nai:{k:'買わない',h:'かわない'},     ta:{k:'買った',h:'かった'},     te:{k:'買って',h:'かって'},     meaning:'사다',             group:1 },
+  { dict:{k:'会う',h:'あう'},         masu:{k:'会います',h:'あいます'},     nai:{k:'会わない',h:'あわない'},     ta:{k:'会った',h:'あった'},     te:{k:'会って',h:'あって'},     meaning:'만나다',           group:1 },
+  { dict:{k:'習う',h:'ならう'},       masu:{k:'習います',h:'ならいます'},   nai:{k:'習わない',h:'ならわない'},   ta:{k:'習った',h:'ならった'},   te:{k:'習って',h:'ならって'},   meaning:'배우다',           group:1 },
+  { dict:{k:'飲む',h:'のむ'},         masu:{k:'飲みます',h:'のみます'},     nai:{k:'飲まない',h:'のまない'},     ta:{k:'飲んだ',h:'のんだ'},     te:{k:'飲んで',h:'のんで'},     meaning:'마시다',           group:1 },
+  { dict:{k:'読む',h:'よむ'},         masu:{k:'読みます',h:'よみます'},     nai:{k:'読まない',h:'よまない'},     ta:{k:'読んだ',h:'よんだ'},     te:{k:'読んで',h:'よんで'},     meaning:'읽다',             group:1 },
+  { dict:{k:'遊ぶ',h:'あそぶ'},       masu:{k:'遊びます',h:'あそびます'},   nai:{k:'遊ばない',h:'あそばない'},   ta:{k:'遊んだ',h:'あそんだ'},   te:{k:'遊んで',h:'あそんで'},   meaning:'놀다',             group:1 },
+  { dict:{k:'呼ぶ',h:'よぶ'},         masu:{k:'呼びます',h:'よびます'},     nai:{k:'呼ばない',h:'よばない'},     ta:{k:'呼んだ',h:'よんだ'},     te:{k:'呼んで',h:'よんで'},     meaning:'부르다',           group:1 },
+  { dict:{k:'死ぬ',h:'しぬ'},         masu:{k:'死にます',h:'しにます'},     nai:{k:'死なない',h:'しなない'},     ta:{k:'死んだ',h:'しんだ'},     te:{k:'死んで',h:'しんで'},     meaning:'죽다',             group:1 },
+  { dict:{k:'乗る',h:'のる'},         masu:{k:'乗ります',h:'のります'},     nai:{k:'乗らない',h:'のらない'},     ta:{k:'乗った',h:'のった'},     te:{k:'乗って',h:'のって'},     meaning:'(교통수단을) 타다', group:1 },
+  { dict:{k:'走る',h:'はしる'},       masu:{k:'走ります',h:'はしります'},   nai:{k:'走らない',h:'はしらない'},   ta:{k:'走った',h:'はしった'},   te:{k:'走って',h:'はしって'},   meaning:'달리다',           group:1, note:'⚠️ る동사처럼 보이지만 1그룹: はしって (はして ✗)' },
+  { dict:{k:'作る',h:'つくる'},       masu:{k:'作ります',h:'つくります'},   nai:{k:'作らない',h:'つくらない'},   ta:{k:'作った',h:'つくった'},   te:{k:'作って',h:'つくって'},   meaning:'만들다',           group:1 },
+  { dict:{k:'わかる',h:'わかる'},     masu:{k:'わかります',h:'わかります'}, nai:{k:'わからない',h:'わからない'}, ta:{k:'わかった',h:'わかった'}, te:{k:'わかって',h:'わかって'}, meaning:'알다/이해하다',    group:1 },
+  { dict:{k:'帰る',h:'かえる'},       masu:{k:'帰ります',h:'かえります'},   nai:{k:'帰らない',h:'かえらない'},   ta:{k:'帰った',h:'かえった'},   te:{k:'帰って',h:'かえって'},   meaning:'돌아가다',         group:1, note:'⚠️ る동사처럼 보이지만 1그룹: かえって (かえて ✗)' },
+  { dict:{k:'入る',h:'はいる'},       masu:{k:'入ります',h:'はいります'},   nai:{k:'入らない',h:'はいらない'},   ta:{k:'入った',h:'はいった'},   te:{k:'入って',h:'はいって'},   meaning:'들어가다',         group:1, note:'⚠️ る동사처럼 보이지만 1그룹: はいって (はいて ✗)' },
+
+  // ── Irregular ──
+  { dict:{k:'する',h:'する'},         masu:{k:'します',h:'します'},         nai:{k:'しない',h:'しない'},         ta:{k:'した',h:'した'},         te:{k:'して',h:'して'},         meaning:'하다',             group:3 },
+  { dict:{k:'くる',h:'くる'},         masu:{k:'きます',h:'きます'},         nai:{k:'こない',h:'こない'},         ta:{k:'きた',h:'きた'},         te:{k:'きて',h:'きて'},         meaning:'오다',             group:3 },
+];
+
+// ═══════════════════════════════════════════════════
+// DERIVATIVES (8종)
+// ═══════════════════════════════════════════════════
+const DERIVATIVES = [
+  { id:'temo_ii',       suffix:'もいい',    label:'てもいい',    meaning:'~해도 된다',        expl: te => `て형(${te}) + <b>もいい</b> → 허가 표현 "~해도 된다"` },
+  { id:'te_wa_ikenai',  suffix:'はいけない', label:'てはいけない', meaning:'~해서는 안 된다',    expl: te => `て형(${te}) + <b>はいけない</b> → 금지 표현 "~해서는 안 된다"` },
+  { id:'te_iru',        suffix:'いる',      label:'ている',      meaning:'~하고 있다',        expl: te => `て형(${te}) + <b>いる</b> → 진행·상태 표현 "~하고 있다"` },
+  { id:'te_kudasai',    suffix:'ください',   label:'てください',   meaning:'~해 주세요',        expl: te => `て형(${te}) + <b>ください</b> → 요청 표현 "~해 주세요"` },
+  { id:'te_miru',       suffix:'みる',      label:'てみる',      meaning:'~해 보다',          expl: te => `て형(${te}) + <b>みる</b> → 시도 표현 "~해 보다"` },
+  { id:'te_shimau',     suffix:'しまう',    label:'てしまう',    meaning:'~해 버리다',        expl: te => `て형(${te}) + <b>しまう</b> → 완료·후회 표현 "~해 버리다"` },
+  { id:'te_kara',       suffix:'から',      label:'てから',      meaning:'~하고 나서',        expl: te => `て형(${te}) + <b>から</b> → 순서 표현 "~하고 나서"` },
+  { id:'te_oku',        suffix:'おく',      label:'ておく',      meaning:'~해 두다',          expl: te => `て형(${te}) + <b>おく</b> → 준비 표현 "미리 ~해 두다"` },
+];
+
+const GIVEN_FORMS = [
+  { id:'dict',  label:'기본형' },
+  { id:'masu',  label:'ます형' },
+  { id:'nai',   label:'ない형' },
+  { id:'ta',    label:'た형' },
+  { id:'deriv', label:'て파생형' },
+];
+
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+let customVerbs = [];
+try { customVerbs = JSON.parse(localStorage.getItem('jp_custom_verbs') || '[]'); } catch(e) {}
+
+let settings = { derivs: DERIVATIVES.map(d=>d.id), givens: GIVEN_FORMS.map(f=>f.id) };
+try {
+  const saved = JSON.parse(localStorage.getItem('jp_settings') || 'null');
+  if (saved) settings = saved;
+} catch(e) {}
+
+let stats = { total:0, correct:0, streak:0, wrongMap:{} };
+
+let cur = {};
+
+// ═══════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════
+const rand = arr => arr[Math.floor(Math.random() * arr.length)];
+const norm = s => s.trim().replace(/[\s　]/g,'');
+
+function ruby(k, h) {
+  if (!k || k === h) return h;
+  return `<ruby>${k}<rt>${h}</rt></ruby>`;
+}
+
+function allVerbs() { return [...BASE_VERBS, ...customVerbs]; }
+
+// ═══════════════════════════════════════════════════
+// QUESTION
+// ═══════════════════════════════════════════════════
+function newQuestion() {
+  const verbs = allVerbs();
+  const verb  = rand(verbs);
+
+  const enabledD = DERIVATIVES.filter(d => settings.derivs.includes(d.id));
+  const enabledG = GIVEN_FORMS .filter(f => settings.givens.includes(f.id));
+  if (!enabledD.length || !enabledG.length) return;
+
+  const target    = rand(enabledD);
+  const givenType = rand(enabledG);
+
+  let givenKanji, givenKana, givenLabel;
+
+  if (givenType.id === 'deriv') {
+    const others = enabledD.filter(d => d.id !== target.id);
+    const src = others.length ? rand(others) : null;
+    if (src) {
+      givenKanji = verb.te.k + src.suffix;
+      givenKana  = verb.te.h + src.suffix;
+      givenLabel = src.label + '형';
+    } else {
+      givenKanji = verb.dict.k; givenKana = verb.dict.h; givenLabel = '기본형';
+    }
+  } else {
+    givenKanji = verb[givenType.id].k;
+    givenKana  = verb[givenType.id].h;
+    givenLabel = givenType.label;
+  }
+
+  cur = { verb, target };
+
+  // Render
+  document.getElementById('given-form-label').textContent = givenLabel;
+  document.getElementById('verb-display').innerHTML = ruby(givenKanji, givenKana);
+  document.getElementById('question-text').innerHTML =
+    `<b>${verb.meaning}</b>을(를) 뜻하는 동사를<br>` +
+    `<span class="target-badge">${target.label} &nbsp;(${target.meaning})</span>&nbsp; 으로 변환하세요.`;
+
+  // Reset UI
+  const inp = document.getElementById('answer-input');
+  inp.value = ''; inp.className = 'answer-input'; inp.disabled = false;
+  document.getElementById('result-card').style.display = 'none';
+  document.getElementById('result-card').className = 'result-card';
+  document.getElementById('next-btn').style.display = 'none';
+  document.getElementById('submit-btn').style.display = '';
+  inp.focus();
+}
+
+// ═══════════════════════════════════════════════════
+// ANSWER CHECK
+// ═══════════════════════════════════════════════════
+function checkAnswer() {
+  const inp = document.getElementById('answer-input');
+  const userAns = norm(inp.value);
+  if (!userAns) { inp.focus(); return; }
+
+  const { verb, target } = cur;
+  const correctKana  = verb.te.h + target.suffix;
+  const correctKanji = verb.te.k + target.suffix;
+  const ok = (userAns === correctKana || userAns === correctKanji);
+
+  stats.total++;
+  inp.disabled = true;
+  document.getElementById('submit-btn').style.display = 'none';
+  document.getElementById('next-btn').style.display = '';
+
+  const rc = document.getElementById('result-card');
+  rc.style.display = 'block';
+
+  const teDisplay = ruby(verb.te.k, verb.te.h);
+
+  if (ok) {
+    stats.correct++;
+    stats.streak++;
+    inp.className = 'answer-input correct';
+    rc.className = 'result-card correct';
+    document.getElementById('result-title').className = 'result-title correct';
+    document.getElementById('result-title').textContent = '✅ 정답!';
+    document.getElementById('result-body').innerHTML =
+      `<div class="correct-answer">${ruby(correctKanji, correctKana)}</div>` +
+      `<div class="explanation">${target.expl(teDisplay)}</div>`;
+  } else {
+    stats.streak = 0;
+    stats.wrongMap[verb.dict.h] = (stats.wrongMap[verb.dict.h] || { k: verb.dict.k, cnt:0 });
+    stats.wrongMap[verb.dict.h].cnt++;
+    inp.className = 'answer-input wrong';
+    rc.className = 'result-card wrong';
+    document.getElementById('result-title').className = 'result-title wrong';
+    document.getElementById('result-title').textContent = '❌ 오답';
+    document.getElementById('result-body').innerHTML =
+      `<div style="font-size:12px;color:#999;margin-bottom:2px">정답</div>` +
+      `<div class="correct-answer">${ruby(correctKanji, correctKana)}</div>` +
+      `<div class="explanation">` +
+        `${ruby(verb.dict.k, verb.dict.h)}의 て형 → <b>${teDisplay}</b><br>` +
+        `${target.expl(teDisplay)}` +
+        (verb.note ? `<span class="note-warn">${verb.note}</span>` : '') +
+      `</div>`;
+  }
+
+  document.getElementById('score-display').textContent = `정답: ${stats.correct} / ${stats.total}`;
+}
+
+// ═══════════════════════════════════════════════════
+// MODALS – Add Verb
+// ═══════════════════════════════════════════════════
+function openAddVerb() { document.getElementById('modal-add').classList.add('open'); }
+
+function confirmAddVerb() {
+  const g = id => document.getElementById(id).value.trim();
+  const dictH = g('a-dict-h'), teH = g('a-te-h'), meaning = g('a-meaning');
+  if (!dictH || !teH || !meaning) { alert('기본형 발음, て형 발음, 의미는 필수입니다.'); return; }
+
+  const dictK  = g('a-dict-k')  || dictH;
+  const teK    = g('a-te-k')    || teH;
+  const masuH  = g('a-masu-h')  || '';
+  const masuK  = g('a-masu-k')  || masuH;
+  const naiH   = g('a-nai-h')   || '';
+  const naiK   = g('a-nai-k')   || naiH;
+  const taH    = g('a-ta-h')    || '';
+  const taK    = g('a-ta-k')    || taH;
+  const note   = g('a-note');
+
+  const v = {
+    dict:{k:dictK,h:dictH}, masu:{k:masuK,h:masuH}, nai:{k:naiK,h:naiH},
+    ta:{k:taK,h:taH}, te:{k:teK,h:teH}, meaning, group:0, custom:true,
+    ...(note && { note })
+  };
+  customVerbs.push(v);
+  localStorage.setItem('jp_custom_verbs', JSON.stringify(customVerbs));
+
+  ['a-dict-k','a-dict-h','a-te-h','a-te-k','a-masu-k','a-masu-h',
+   'a-nai-k','a-nai-h','a-ta-k','a-ta-h','a-meaning','a-note']
+    .forEach(id => { document.getElementById(id).value = ''; });
+
+  closeModal('modal-add');
+  alert(`"${dictK}" 동사가 추가되었습니다!`);
+}
+
+// ── Stats ──
+function openStats() {
+  document.getElementById('st-total').textContent   = stats.total;
+  document.getElementById('st-correct').textContent = stats.correct;
+  document.getElementById('st-rate').textContent    = stats.total ? Math.round(stats.correct/stats.total*100)+'%' : '0%';
+  document.getElementById('st-streak').textContent  = stats.streak;
+
+  const wrongs = Object.entries(stats.wrongMap)
+    .map(([h,v]) => ({ h, k:v.k, cnt:v.cnt }))
+    .sort((a,b) => b.cnt - a.cnt).slice(0,5);
+
+  document.getElementById('wrong-list').innerHTML = wrongs.length
+    ? `<div style="font-size:12px;color:#888;margin-bottom:8px;font-weight:600">자주 틀리는 동사 TOP 5</div>` +
+      wrongs.map(w =>
+        `<div class="wrong-row"><span>${ruby(w.k,w.h)}</span><span class="wrong-count">${w.cnt}회 오답</span></div>`
+      ).join('')
+    : '';
+
+  document.getElementById('modal-stats').classList.add('open');
+}
+
+function resetStats() {
+  if (!confirm('통계를 초기화하시겠습니까?')) return;
+  stats = { total:0, correct:0, streak:0, wrongMap:{} };
+  document.getElementById('score-display').textContent = '정답: 0 / 0';
+  closeModal('modal-stats');
+}
+
+// ── Settings ──
+function openSettings() {
+  document.getElementById('deriv-checks').innerHTML = DERIVATIVES.map(d =>
+    `<label class="check-label">
+      <input type="checkbox" value="${d.id}" ${settings.derivs.includes(d.id)?'checked':''}>
+      <span><b>${d.label}</b> <span class="check-sub">${d.meaning}</span></span>
+    </label>`
+  ).join('');
+
+  document.getElementById('given-checks').innerHTML = GIVEN_FORMS.map(f =>
+    `<label class="check-label">
+      <input type="checkbox" value="${f.id}" ${settings.givens.includes(f.id)?'checked':''}>
+      <span>${f.label}</span>
+    </label>`
+  ).join('');
+
+  document.getElementById('modal-settings').classList.add('open');
+}
+
+function saveSettings() {
+  const dc = [...document.querySelectorAll('#deriv-checks input:checked')].map(c=>c.value);
+  const gc = [...document.querySelectorAll('#given-checks input:checked')].map(c=>c.value);
+  if (!dc.length) { alert('파생 표현을 최소 1개 선택하세요.'); return; }
+  if (!gc.length) { alert('주어진 형태를 최소 1개 선택하세요.'); return; }
+  settings = { derivs:dc, givens:gc };
+  localStorage.setItem('jp_settings', JSON.stringify(settings));
+  closeModal('modal-settings');
+  newQuestion();
+}
+
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); });
+});
+
+// ═══════════════════════════════════════════════════
+// EVENTS & INIT
+// ═══════════════════════════════════════════════════
+document.getElementById('submit-btn').addEventListener('click', checkAnswer);
+document.getElementById('answer-input').addEventListener('keydown', e => { if (e.key === 'Enter') checkAnswer(); });
+document.getElementById('next-btn').addEventListener('click', newQuestion);
+
+newQuestion();
+</script>
+</body>
+</html>

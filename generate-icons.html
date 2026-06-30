@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Icon Generator</title></head>
+<body>
+<canvas id="c192" width="192" height="192" style="display:none"></canvas>
+<canvas id="c512" width="512" height="512" style="display:none"></canvas>
+<p>아이콘 생성 중...</p>
+<script>
+function drawIcon(canvas) {
+  const s = canvas.width;
+  const ctx = canvas.getContext('2d');
+  // Background
+  const grad = ctx.createLinearGradient(0, 0, s, s);
+  grad.addColorStop(0, '#4c6ef5');
+  grad.addColorStop(1, '#3b5bdb');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, s, s, s * 0.22);
+  ctx.fill();
+  // Text
+  ctx.fillStyle = 'white';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `bold ${s * 0.48}px 'Yu Gothic', 'Meiryo', serif`;
+  ctx.fillText('て', s / 2, s * 0.45);
+  ctx.font = `${s * 0.15}px 'Segoe UI', sans-serif`;
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  ctx.fillText('형 연습', s / 2, s * 0.78);
+}
+
+['c192','c512'].forEach(id => {
+  const canvas = document.getElementById(id);
+  drawIcon(canvas);
+  const a = document.createElement('a');
+  a.download = `icon-${canvas.width}.png`;
+  a.href = canvas.toDataURL('image/png');
+  a.textContent = `icon-${canvas.width}.png 다운로드`;
+  a.style.display = 'block';
+  a.style.margin = '10px';
+  a.style.fontSize = '16px';
+  document.body.appendChild(a);
+});
+document.querySelector('p').textContent = '아이콘이 생성되었습니다. 각 링크를 클릭해 저장하세요:';
+</script>
+</body>
+</html>
