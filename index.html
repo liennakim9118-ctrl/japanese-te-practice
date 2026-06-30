@@ -474,7 +474,7 @@ ruby rt {
     <div class="conj-preview" id="a-preview"></div>
     <button class="btn-confirm" style="width:100%" onclick="confirmAddVerb()">＋ 추가</button>
 
-    <div class="section-title">내 동사 목록 (틀린 순)</div>
+    <div class="section-title">동사 목록 (틀린 순)</div>
     <div id="verb-list"></div>
 
     <div class="modal-btns">
@@ -886,25 +886,25 @@ function confirmAddVerb() {
   alert(`"${c.dict.k}" 추가 완료! (${GROUP_NAME[c.group]} · て형 ${c.te.h})`);
 }
 
-// ── 내 동사 목록 (틀린 순) ──
+// ── 동사 목록: 기본 동사 + 내 동사 모두 (틀린 순) ──
 function renderVerbList() {
   const list = document.getElementById('verb-list');
-  if (!customVerbs.length) {
-    list.innerHTML = '<div class="empty-msg">아직 추가한 동사가 없어요.<br>위에서 <b>기본형만</b> 입력하면 자동으로 활용해 출제합니다.</div>';
-    return;
-  }
-  const rows = customVerbs.map((v, i) => {
-    const s = verbStats[v.dict.h] || { total:0, correct:0, wrong:0 };
-    return { v, i, total:s.total, correct:s.correct, wrong:s.wrong };
+  const all = [
+    ...BASE_VERBS.map(v => ({ v, custom:false, ci:-1 })),
+    ...customVerbs.map((v, ci) => ({ v, custom:true, ci })),
+  ];
+  const rows = all.map(o => {
+    const s = verbStats[o.v.dict.h] || { total:0, correct:0, wrong:0 };
+    return { ...o, total:s.total, correct:s.correct, wrong:s.wrong };
   }).sort((a, b) => (b.wrong - a.wrong) || (b.total - a.total));
 
   list.innerHTML = rows.map(r => `
     <div class="review-row">
       <div>
-        <div class="rv-main">${ruby(r.v.dict.k, r.v.dict.h)} <span style="color:#888;font-weight:400">${r.v.meaning}</span></div>
+        <div class="rv-main">${ruby(r.v.dict.k, r.v.dict.h)} <span style="color:#888;font-weight:400">${r.v.meaning}</span>${r.custom ? ' <span style="color:#3b5bdb;font-size:11px;font-weight:700">내 동사</span>' : ''}</div>
         <div class="rv-sub">푼 <b>${r.total}</b> · 맞춤 <b style="color:#2e7d32">${r.correct}</b> · 틀림 <b style="color:#e53935">${r.wrong}</b></div>
       </div>
-      <button class="rv-del" onclick="deleteCustomVerb(${r.i})" title="삭제">🗑️</button>
+      ${r.custom ? `<button class="rv-del" onclick="deleteCustomVerb(${r.ci})" title="삭제">🗑️</button>` : ''}
     </div>`).join('');
 }
 
