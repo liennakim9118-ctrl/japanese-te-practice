@@ -962,14 +962,19 @@ function updatePreview() {
   const el = document.getElementById('a-preview');
   const dictH = document.getElementById('a-dict-h').value.trim();
   if (!dictH) { el.innerHTML = ''; return; }
-  const { entry, viaConj, c } = resolveAdd();
+  const { dictH: dh, entry, viaConj, c } = resolveAdd();
   // 사전에 있으면 한자/의미 빈 칸 자동 완성
   if (entry) {
     const kBox = document.getElementById('a-dict-k'), mBox = document.getElementById('a-meaning');
     if (!kBox.value.trim()) kBox.value = entry.k;
     if (!mBox.value.trim()) mBox.value = entry.m;
   }
-  if (!c) { el.innerHTML = '<span style="color:#e53935">자동 활용 실패 — 기본형(사전형)인지 확인하세요.</span>'; return; }
+  if (!c) {
+    const sug = resolveBase(dh + 'する');   // 명사만 넣은 경우 する동사 제안
+    el.innerHTML = '<span style="color:#e53935">자동 활용 실패 — 기본형(사전형)인지 확인하세요.</span>' +
+      (sug ? `<br><span style="color:#3b5bdb">혹시 <b>${VERB_DICT[sug].k}</b>(${VERB_DICT[sug].m})? 끝에 <b>する</b>를 붙여보세요.</span>` : '');
+    return;
+  }
   const dup = allVerbs().some(v => v.dict.h === c.dict.h);
   let head;
   if (dup)                    head = `<span style="color:#e53935;font-weight:700">⚠️ 이미 있는 동사</span> ${ruby(c.dict.k, c.dict.h)} — 중복 추가 불가`;
