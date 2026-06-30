@@ -373,6 +373,21 @@ ruby rt {
 .rv-del:active { color: #e53935; }
 .empty-msg { color: #999; font-size: 14px; text-align: center; padding: 26px 6px; line-height: 1.7; }
 .review-badge { color: #e65100; font-weight: 700; }
+
+/* ── Add-verb: select & preview ── */
+.form-group select {
+  width: 100%; border: 1.5px solid #e0e0e0; border-radius: 10px;
+  padding: 12px 14px; font-size: 16px; outline: none; background: white;
+  -webkit-appearance: none; appearance: none; color: #222;
+}
+.form-group select:focus { border-color: #3b5bdb; }
+.conj-preview {
+  background: #f5f7ff; border-radius: 10px; padding: 11px 13px; margin: 4px 0 14px;
+  font-size: clamp(11px, 3vw, 13px); color: #555; line-height: 1.8;
+  font-family: 'Noto Sans JP', 'Yu Gothic', sans-serif;
+}
+.conj-preview:empty { display: none; }
+.conj-preview b { color: #3b5bdb; }
 </style>
 </head>
 <body>
@@ -429,52 +444,41 @@ ruby rt {
 
 </div>
 
-<!-- ───── Add Verb Modal ───── -->
+<!-- ───── Verb Manage Modal ───── -->
 <div class="modal-overlay" id="modal-add">
   <div class="modal">
-    <h2>새 동사 추가</h2>
+    <h2>＋ 내 동사 관리</h2>
+
+    <div class="section-title">새 동사 추가 (기본형만 넣으면 자동 변환)</div>
     <div class="form-group">
-      <label>기본형 — 한자 (예: 飲む)</label>
-      <input id="a-dict-k" placeholder="飲む　　← 한자 없으면 히라가나">
+      <label>기본형 — 히라가나 (필수, 예: のむ)</label>
+      <input id="a-dict-h" placeholder="のむ　← 사전형(기본형)으로 입력">
     </div>
     <div class="form-group">
-      <label>기본형 발음 — 히라가나 (필수, 예: のむ)</label>
-      <input id="a-dict-h" placeholder="のむ">
-    </div>
-    <div class="form-group">
-      <label>て형 발음 — 히라가나 (필수, 예: のんで)</label>
-      <input id="a-te-h" placeholder="のんで">
-    </div>
-    <div class="form-group">
-      <label>て형 — 한자 (예: 飲んで)</label>
-      <input id="a-te-k" placeholder="飲んで　　← 없으면 비워도 됨">
-    </div>
-    <div class="form-group">
-      <label>ます형 — 한자 / 히라가나</label>
-      <input id="a-masu-k" placeholder="飲みます">
-      <input id="a-masu-h" placeholder="のみます">
-    </div>
-    <div class="form-group">
-      <label>ない형 — 한자 / 히라가나</label>
-      <input id="a-nai-k" placeholder="飲まない">
-      <input id="a-nai-h" placeholder="のまない">
-    </div>
-    <div class="form-group">
-      <label>た형 — 한자 / 히라가나</label>
-      <input id="a-ta-k" placeholder="飲んだ">
-      <input id="a-ta-h" placeholder="のんだ">
+      <label>기본형 — 한자 (선택, 예: 飲む)</label>
+      <input id="a-dict-k" placeholder="飲む　← 없으면 비워도 됨">
     </div>
     <div class="form-group">
       <label>의미 (한국어, 필수)</label>
       <input id="a-meaning" placeholder="마시다" style="font-family:inherit">
     </div>
     <div class="form-group">
-      <label>특이사항 (선택, 예: 불규칙 て형)</label>
-      <input id="a-note" placeholder="없으면 비워도 됨" style="font-family:inherit">
+      <label>동사 그룹 (보통 '자동'으로 충분해요)</label>
+      <select id="a-group">
+        <option value="auto">자동 판별</option>
+        <option value="1">1그룹 (う동사)</option>
+        <option value="2">2그룹 (る동사)</option>
+        <option value="3">3그룹 (する·くる)</option>
+      </select>
     </div>
+    <div class="conj-preview" id="a-preview"></div>
+    <button class="btn-confirm" style="width:100%" onclick="confirmAddVerb()">＋ 추가</button>
+
+    <div class="section-title">내 동사 목록 (틀린 순)</div>
+    <div id="verb-list"></div>
+
     <div class="modal-btns">
-      <button class="btn-cancel" onclick="closeModal('modal-add')">취소</button>
-      <button class="btn-confirm" onclick="confirmAddVerb()">추가</button>
+      <button class="btn-cancel" onclick="closeModal('modal-add')">닫기</button>
     </div>
   </div>
 </div>
@@ -482,7 +486,7 @@ ruby rt {
 <!-- ───── Stats Modal ───── -->
 <div class="modal-overlay" id="modal-stats">
   <div class="modal">
-    <h2>📊 학습 통계</h2>
+    <h2>📊 오늘의 학습 통계 <span style="font-size:12px;color:#999;font-weight:400">(매일 00시 KST 초기화)</span></h2>
     <div class="stats-grid">
       <div class="stat-box"><div class="stat-num" id="st-total">0</div><div class="stat-label">총 문제</div></div>
       <div class="stat-box"><div class="stat-num" id="st-correct">0</div><div class="stat-label">정답</div></div>
@@ -609,7 +613,38 @@ try {
   if (saved) settings = saved;
 } catch(e) {}
 
-let stats = { total:0, correct:0, streak:0, wrongMap:{} };
+// ── 통계: 하루 단위 (KST 00시 리셋), 새로고침해도 유지 ──
+function kstDateStr() {
+  // epoch를 +9h 시프트한 뒤 UTC 날짜를 읽으면 = 한국 날짜
+  return new Date(Date.now() + 9*3600*1000).toISOString().slice(0,10);
+}
+let stats = { date: kstDateStr(), total:0, correct:0, streak:0, wrongMap:{} };
+try {
+  const saved = JSON.parse(localStorage.getItem('jp_stats') || 'null');
+  if (saved && saved.date === kstDateStr()) stats = saved;   // 오늘 기록만 복원
+} catch(e) {}
+function saveStats() { localStorage.setItem('jp_stats', JSON.stringify(stats)); }
+function rolloverStats() {   // 날짜가 바뀌었으면 리셋
+  if (stats.date !== kstDateStr()) {
+    stats = { date: kstDateStr(), total:0, correct:0, streak:0, wrongMap:{} };
+    saveStats();
+    const sd = document.getElementById('score-display');
+    if (sd) sd.textContent = '정답: 0 / 0';
+  }
+}
+
+// ── 동사별 누적 통계(영구): { 'のむ': { k:'飲む', total, correct, wrong } } ──
+let verbStats = {};
+try { verbStats = JSON.parse(localStorage.getItem('jp_verb_stats') || '{}'); } catch(e) {}
+function saveVerbStats() { localStorage.setItem('jp_verb_stats', JSON.stringify(verbStats)); }
+function bumpVerbStat(verb, ok) {
+  const h = verb.dict.h;
+  if (!verbStats[h]) verbStats[h] = { k: verb.dict.k, total:0, correct:0, wrong:0 };
+  verbStats[h].k = verb.dict.k;
+  verbStats[h].total++;
+  if (ok) verbStats[h].correct++; else verbStats[h].wrong++;
+  saveVerbStats();
+}
 
 // 복습 컬렉션: { "のむ|te_shimau": { v:<verb>, t:'te_shimau', w:오답횟수, m:태깅여부 } }
 let review = {};
@@ -639,6 +674,7 @@ function allVerbs() { return [...BASE_VERBS, ...customVerbs]; }
 // QUESTION
 // ═══════════════════════════════════════════════════
 function newQuestion() {
+  rolloverStats();
   if (reviewMode) { newReviewQuestion(); return; }
   const verbs = allVerbs();
   const verb  = rand(verbs);
@@ -702,6 +738,7 @@ function checkAnswer() {
   const ok = (userAns === correctKana || userAns === correctKanji);
 
   stats.total++;
+  bumpVerbStat(verb, ok);
   inp.disabled = true;
   document.getElementById('submit-btn').style.display = 'none';
   document.getElementById('next-btn').style.display = '';
@@ -748,46 +785,141 @@ function checkAnswer() {
   }
 
   document.getElementById('score-display').textContent = `정답: ${stats.correct} / ${stats.total}`;
+  saveStats();
 }
 
 // ═══════════════════════════════════════════════════
 // MODALS – Add Verb
 // ═══════════════════════════════════════════════════
-function openAddVerb() { document.getElementById('modal-add').classList.add('open'); }
+function openAddVerb() {
+  updatePreview();
+  renderVerbList();
+  document.getElementById('modal-add').classList.add('open');
+}
+
+// ── 자동 활용(conjugation) ──
+const ROW_I = new Set('いきぎしじちにひびぴみり'.split(''));
+const ROW_E = new Set('えけげせぜてでねへべぺめれ'.split(''));
+// る로 끝나지만 1그룹인 흔한 동사들 (자동판별 예외)
+// 주의: きる(着る)·ねる(寝る)처럼 G2가 더 흔한 동음이의어는 제외 (드문 G1 切る·練る는 그룹 수동 선택)
+const G1_RU = new Set(['かえる','はいる','はしる','しる','いる','へる','しゃべる','まじる','ちる','ける','かぎる','すべる','にぎる','あせる','まいる','くださる','なさる','しげる','よみがえる','うる']);
+
+const G1_END = {
+  'う':{masu:'います',nai:'わない',ta:'った',te:'って'},
+  'く':{masu:'きます',nai:'かない',ta:'いた',te:'いて'},
+  'ぐ':{masu:'ぎます',nai:'がない',ta:'いだ',te:'いで'},
+  'す':{masu:'します',nai:'さない',ta:'した',te:'して'},
+  'つ':{masu:'ちます',nai:'たない',ta:'った',te:'って'},
+  'ぬ':{masu:'にます',nai:'なない',ta:'んだ',te:'んで'},
+  'ぶ':{masu:'びます',nai:'ばない',ta:'んだ',te:'んで'},
+  'む':{masu:'みます',nai:'まない',ta:'んだ',te:'んで'},
+  'る':{masu:'ります',nai:'らない',ta:'った',te:'って'},
+};
+
+function detectGroup(h) {
+  if (h === 'する' || (h.length > 2 && h.endsWith('する'))) return 3;
+  if (h === 'くる' || h === '来る') return 3;
+  if (!h.endsWith('る')) return 1;
+  const prev = h.slice(-2, -1);
+  if ((ROW_I.has(prev) || ROW_E.has(prev)) && !G1_RU.has(h)) return 2;
+  return 1;
+}
+
+// 기본형(히라가나 dictH, 한자 dictK)에서 masu/nai/ta/te 자동 생성. 실패 시 null
+function conjugate(dictH, dictK, groupOpt) {
+  if (!dictH) return null;
+  dictK = dictK || dictH;
+  const group = (groupOpt && groupOpt !== 'auto') ? Number(groupOpt) : detectGroup(dictH);
+  const kStem = dictK.slice(0, -1), hStem = dictH.slice(0, -1);
+  const mk = end => ({ k: kStem + end, h: hStem + end });
+  let masu, nai, ta, te;
+
+  if (group === 3) {
+    if (dictH.endsWith('する')) {
+      const bk = dictK.slice(0, -2), bh = dictH.slice(0, -2);
+      masu={k:bk+'します',h:bh+'します'}; nai={k:bk+'しない',h:bh+'しない'};
+      ta={k:bk+'した',h:bh+'した'};       te={k:bk+'して',h:bh+'して'};
+    } else { // くる / 来る (읽기 변화 く/き/こ)
+      masu={k:kStem+'ます',h:'きます'}; nai={k:kStem+'ない',h:'こない'};
+      ta={k:kStem+'た',h:'きた'};       te={k:kStem+'て',h:'きて'};
+    }
+  } else if (group === 2) {
+    masu=mk('ます'); nai=mk('ない'); ta=mk('た'); te=mk('て');
+  } else { // 1그룹
+    const last = dictH.slice(-1);
+    let e = G1_END[last];
+    if (!e) return null;
+    if (dictH === 'いく' || dictK === '行く') e = { masu:'きます', nai:'かない', ta:'った', te:'って' }; // 예외
+    masu=mk(e.masu); nai=mk(e.nai); ta=mk(e.ta); te=mk(e.te);
+  }
+  if (dictK === dictH) { [masu,nai,ta,te].forEach(f => f.k = f.h); }   // 한자 미입력 → k=h
+  return { dict:{k:dictK,h:dictH}, masu, nai, ta, te, group };
+}
+
+const GROUP_NAME = ['', '1그룹', '2그룹', '3그룹'];
+
+function updatePreview() {
+  const g = id => document.getElementById(id).value.trim();
+  const dictH = g('a-dict-h'), dictK = g('a-dict-k') || g('a-dict-h');
+  const el = document.getElementById('a-preview');
+  if (!dictH) { el.innerHTML = ''; return; }
+  const c = conjugate(dictH, dictK, document.getElementById('a-group').value);
+  if (!c) { el.innerHTML = '<span style="color:#e53935">자동 활용 실패 — 기본형(사전형)인지 확인하세요.</span>'; return; }
+  el.innerHTML = `<b>${GROUP_NAME[c.group]}</b> 자동 활용<br>` +
+    `ます: ${c.masu.h} ・ ない: ${c.nai.h} ・ た: ${c.ta.h} ・ <b>て: ${c.te.h}</b>`;
+}
 
 function confirmAddVerb() {
   const g = id => document.getElementById(id).value.trim();
-  const dictH = g('a-dict-h'), teH = g('a-te-h'), meaning = g('a-meaning');
-  if (!dictH || !teH || !meaning) { alert('기본형 발음, て형 발음, 의미는 필수입니다.'); return; }
+  const dictH = g('a-dict-h'), dictK = g('a-dict-k') || dictH, meaning = g('a-meaning');
+  if (!dictH || !meaning) { alert('기본형 히라가나와 의미는 필수입니다.'); return; }
+  const c = conjugate(dictH, dictK, document.getElementById('a-group').value);
+  if (!c) { alert('활용형을 자동 생성하지 못했어요.\n기본형(사전형)을 히라가나로 입력했는지 확인해 주세요. (예: のむ, たべる)'); return; }
 
-  const dictK  = g('a-dict-k')  || dictH;
-  const teK    = g('a-te-k')    || teH;
-  const masuH  = g('a-masu-h')  || '';
-  const masuK  = g('a-masu-k')  || masuH;
-  const naiH   = g('a-nai-h')   || '';
-  const naiK   = g('a-nai-k')   || naiH;
-  const taH    = g('a-ta-h')    || '';
-  const taK    = g('a-ta-k')    || taH;
-  const note   = g('a-note');
-
-  const v = {
-    dict:{k:dictK,h:dictH}, masu:{k:masuK,h:masuH}, nai:{k:naiK,h:naiH},
-    ta:{k:taK,h:taH}, te:{k:teK,h:teH}, meaning, group:0, custom:true,
-    ...(note && { note })
-  };
-  customVerbs.push(v);
+  customVerbs.push({ dict:c.dict, masu:c.masu, nai:c.nai, ta:c.ta, te:c.te, meaning, group:c.group, custom:true });
   localStorage.setItem('jp_custom_verbs', JSON.stringify(customVerbs));
 
-  ['a-dict-k','a-dict-h','a-te-h','a-te-k','a-masu-k','a-masu-h',
-   'a-nai-k','a-nai-h','a-ta-k','a-ta-h','a-meaning','a-note']
-    .forEach(id => { document.getElementById(id).value = ''; });
+  ['a-dict-h','a-dict-k','a-meaning'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('a-group').value = 'auto';
+  updatePreview();
+  renderVerbList();
+  alert(`"${c.dict.k}" 추가 완료! (${GROUP_NAME[c.group]} · て형 ${c.te.h})`);
+}
 
-  closeModal('modal-add');
-  alert(`"${dictK}" 동사가 추가되었습니다!`);
+// ── 내 동사 목록 (틀린 순) ──
+function renderVerbList() {
+  const list = document.getElementById('verb-list');
+  if (!customVerbs.length) {
+    list.innerHTML = '<div class="empty-msg">아직 추가한 동사가 없어요.<br>위에서 <b>기본형만</b> 입력하면 자동으로 활용해 출제합니다.</div>';
+    return;
+  }
+  const rows = customVerbs.map((v, i) => {
+    const s = verbStats[v.dict.h] || { total:0, correct:0, wrong:0 };
+    return { v, i, total:s.total, correct:s.correct, wrong:s.wrong };
+  }).sort((a, b) => (b.wrong - a.wrong) || (b.total - a.total));
+
+  list.innerHTML = rows.map(r => `
+    <div class="review-row">
+      <div>
+        <div class="rv-main">${ruby(r.v.dict.k, r.v.dict.h)} <span style="color:#888;font-weight:400">${r.v.meaning}</span></div>
+        <div class="rv-sub">푼 <b>${r.total}</b> · 맞춤 <b style="color:#2e7d32">${r.correct}</b> · 틀림 <b style="color:#e53935">${r.wrong}</b></div>
+      </div>
+      <button class="rv-del" onclick="deleteCustomVerb(${r.i})" title="삭제">🗑️</button>
+    </div>`).join('');
+}
+
+function deleteCustomVerb(i) {
+  const v = customVerbs[i];
+  if (!v) return;
+  if (!confirm(`"${v.dict.k}" 동사를 목록에서 삭제할까요?`)) return;
+  customVerbs.splice(i, 1);
+  localStorage.setItem('jp_custom_verbs', JSON.stringify(customVerbs));
+  renderVerbList();
 }
 
 // ── Stats ──
 function openStats() {
+  rolloverStats();
   document.getElementById('st-total').textContent   = stats.total;
   document.getElementById('st-correct').textContent = stats.correct;
   document.getElementById('st-rate').textContent    = stats.total ? Math.round(stats.correct/stats.total*100)+'%' : '0%';
@@ -808,8 +940,9 @@ function openStats() {
 }
 
 function resetStats() {
-  if (!confirm('통계를 초기화하시겠습니까?')) return;
-  stats = { total:0, correct:0, streak:0, wrongMap:{} };
+  if (!confirm('오늘 통계를 초기화하시겠습니까?')) return;
+  stats = { date: kstDateStr(), total:0, correct:0, streak:0, wrongMap:{} };
+  saveStats();
   document.getElementById('score-display').textContent = '정답: 0 / 0';
   closeModal('modal-stats');
 }
@@ -998,6 +1131,10 @@ document.getElementById('submit-btn').addEventListener('click', checkAnswer);
 document.getElementById('answer-input').addEventListener('keydown', e => { if (e.key === 'Enter') checkAnswer(); });
 document.getElementById('next-btn').addEventListener('click', newQuestion);
 
+['a-dict-h','a-dict-k'].forEach(id => document.getElementById(id).addEventListener('input', updatePreview));
+document.getElementById('a-group').addEventListener('change', updatePreview);
+
+document.getElementById('score-display').textContent = `정답: ${stats.correct} / ${stats.total}`;
 updateReviewBadge();
 newQuestion();
 </script>
