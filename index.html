@@ -388,6 +388,9 @@ ruby rt {
 }
 .conj-preview:empty { display: none; }
 .conj-preview b { color: #3b5bdb; }
+.vrow-check { display: flex; align-items: center; flex-shrink: 0; }
+.vrow-check input { width: 20px; height: 20px; accent-color: #3b5bdb; cursor: pointer; }
+.review-row.off { opacity: 0.4; }
 </style>
 </head>
 <body>
@@ -474,11 +477,11 @@ ruby rt {
     <div class="conj-preview" id="a-preview"></div>
     <button class="btn-confirm" style="width:100%" onclick="confirmAddVerb()">＋ 추가</button>
 
-    <div class="section-title">동사 목록 (틀린 순)</div>
+    <div class="section-title">동사 목록 (체크 끄면 출제 제외 · 틀린 순)</div>
     <div id="verb-list"></div>
 
     <div class="modal-btns">
-      <button class="btn-cancel" onclick="closeModal('modal-add')">닫기</button>
+      <button class="btn-cancel" onclick="closeManage()">닫기</button>
     </div>
   </div>
 </div>
@@ -670,13 +673,31 @@ function ruby(k, h) {
 
 function allVerbs() { return [...BASE_VERBS, ...customVerbs]; }
 
+// 출제 제외(off)된 동사: dict.h 집합. 기본은 모두 출제(on)
+let disabledVerbs = new Set();
+try { disabledVerbs = new Set(JSON.parse(localStorage.getItem('jp_disabled_verbs') || '[]')); } catch(e) {}
+const isVerbEnabled = v => !disabledVerbs.has(v.dict.h);
+function quizVerbs() { return allVerbs().filter(isVerbEnabled); }
+let verbSetDirty = false;   // 출제 동사 변경 시 모달 닫을 때 새 문제 생성
+
 // ═══════════════════════════════════════════════════
 // QUESTION
 // ═══════════════════════════════════════════════════
 function newQuestion() {
   rolloverStats();
   if (reviewMode) { newReviewQuestion(); return; }
-  const verbs = allVerbs();
+  const verbs = quizVerbs();
+  if (!verbs.length) {
+    document.getElementById('given-form-label').textContent = '안내';
+    document.getElementById('verb-display').innerHTML = '🚫';
+    document.getElementById('question-text').innerHTML = '출제할 동사가 없어요.<br><b>＋ 동사</b> 목록에서 체크박스를 켜서 동사를 활성화해 주세요.';
+    const inp = document.getElementById('answer-input');
+    inp.value = ''; inp.disabled = true;
+    document.getElementById('submit-btn').style.display = 'none';
+    document.getElementById('next-btn').style.display = 'none';
+    document.getElementById('result-card').style.display = 'none';
+    return;
+  }
   const verb  = rand(verbs);
 
   const enabledD = DERIVATIVES.filter(d => settings.derivs.includes(d.id));
@@ -898,14 +919,32 @@ function renderVerbList() {
     return { ...o, total:s.total, correct:s.correct, wrong:s.wrong };
   }).sort((a, b) => (b.wrong - a.wrong) || (b.total - a.total));
 
-  list.innerHTML = rows.map(r => `
-    <div class="review-row">
-      <div>
+  list.innerHTML = rows.map(r => {
+    const on = isVerbEnabled(r.v);
+    return `
+    <div class="review-row${on ? '' : ' off'}">
+      <label class="vrow-check"><input type="checkbox" ${on ? 'checked' : ''} onchange="toggleVerbEnabled('${r.v.dict.h}')"></label>
+      <div style="flex:1">
         <div class="rv-main">${ruby(r.v.dict.k, r.v.dict.h)} <span style="color:#888;font-weight:400">${r.v.meaning}</span>${r.custom ? ' <span style="color:#3b5bdb;font-size:11px;font-weight:700">내 동사</span>' : ''}</div>
         <div class="rv-sub">푼 <b>${r.total}</b> · 맞춤 <b style="color:#2e7d32">${r.correct}</b> · 틀림 <b style="color:#e53935">${r.wrong}</b></div>
       </div>
       ${r.custom ? `<button class="rv-del" onclick="deleteCustomVerb(${r.ci})" title="삭제">🗑️</button>` : ''}
-    </div>`).join('');
+    </div>`;
+  }).join('');
+}
+
+// 출제 on/off 토글
+function toggleVerbEnabled(h) {
+  if (disabledVerbs.has(h)) disabledVerbs.delete(h); else disabledVerbs.add(h);
+  localStorage.setItem('jp_disabled_verbs', JSON.stringify([...disabledVerbs]));
+  verbSetDirty = true;
+  renderVerbList();
+}
+
+// 동사 관리 모달 닫기: 출제 동사가 바뀌었으면 새 문제 생성
+function closeManage() {
+  closeModal('modal-add');
+  if (verbSetDirty && !reviewMode) { verbSetDirty = false; newQuestion(); }
 }
 
 function deleteCustomVerb(i) {
@@ -1121,7 +1160,11 @@ function exitReview(completed) {
 }
 
 document.querySelectorAll('.modal-overlay').forEach(el => {
-  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); });
+  el.addEventListener('click', e => {
+    if (e.target !== el) return;
+    el.classList.remove('open');
+    if (el.id === 'modal-add' && verbSetDirty && !reviewMode) { verbSetDirty = false; newQuestion(); }
+  });
 });
 
 // ═══════════════════════════════════════════════════
