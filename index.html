@@ -454,8 +454,8 @@ ruby rt {
 
     <div class="section-title">새 동사 추가 (기본형 입력 → 사전 자동완성·검증)</div>
     <div class="form-group">
-      <label>기본형 — 히라가나 (필수, 예: のむ)</label>
-      <input id="a-dict-h" placeholder="のむ　← 사전형(기본형)으로 입력">
+      <label>기본형 — 히라가나 (필수, 예: のむ ／ 사전에 있으면 활용형 のみます·飲んで 도 인식)</label>
+      <input id="a-dict-h" placeholder="のむ　← 기본형 권장 (활용형도 사전에 있으면 자동 환원)">
     </div>
     <div class="form-group">
       <label>기본형 — 한자 (사전에 있으면 자동완성, 예: 飲む)</label>
@@ -929,23 +929,40 @@ const VERB_DICT = {
 };
 const lookupVerb = h => VERB_DICT[h] || null;
 
-// 사전 조회 → 한자/그룹 자동 해석
+// 활용형 → 기본형 역인덱스 (사전 동사 한정): 'のみます'·'飲んで'·'飲む' 입력 시 기본형 のむ로 인식
+const CONJ_INDEX = (() => {
+  const idx = {};
+  const put = (key, base) => { if (key && !(key in idx)) idx[key] = base; };
+  for (const [h, e] of Object.entries(VERB_DICT)) {
+    const c = conjugate(h, e.k, String(e.g));
+    if (!c) continue;
+    [c.dict, c.masu, c.nai, c.ta, c.te].forEach(f => { put(f.h, h); put(f.k, h); });
+  }
+  return idx;
+})();
+// 입력값을 기본형(히라가나)으로 해석. 못 찾으면 null
+const resolveBase = input => (VERB_DICT[input] ? input : (CONJ_INDEX[input] || null));
+
+// 사전 조회 → 기본형/한자/그룹 자동 해석 (활용형 입력도 기본형으로 환원)
 function resolveAdd() {
   const g = id => document.getElementById(id).value.trim();
-  const dictH = g('a-dict-h');
+  const raw = g('a-dict-h');
+  const base = resolveBase(raw);
+  const viaConj = !!(base && base !== raw);   // 활용형/한자 등 기본형이 아닌 입력으로 인식됨
+  const dictH = base || raw;
   const entry = lookupVerb(dictH);
   const dictK = g('a-dict-k') || (entry ? entry.k : '') || dictH;
   const sel = document.getElementById('a-group').value;
   const groupOpt = sel !== 'auto' ? sel : (entry ? String(entry.g) : 'auto');
   const meaning = g('a-meaning') || (entry ? entry.m : '');
-  return { dictH, dictK, meaning, entry, c: conjugate(dictH, dictK, groupOpt) };
+  return { raw, dictH, dictK, meaning, entry, viaConj, c: conjugate(dictH, dictK, groupOpt) };
 }
 
 function updatePreview() {
   const el = document.getElementById('a-preview');
   const dictH = document.getElementById('a-dict-h').value.trim();
   if (!dictH) { el.innerHTML = ''; return; }
-  const { entry, c } = resolveAdd();
+  const { entry, viaConj, c } = resolveAdd();
   // 사전에 있으면 한자/의미 빈 칸 자동 완성
   if (entry) {
     const kBox = document.getElementById('a-dict-k'), mBox = document.getElementById('a-meaning');
@@ -953,9 +970,10 @@ function updatePreview() {
     if (!mBox.value.trim()) mBox.value = entry.m;
   }
   if (!c) { el.innerHTML = '<span style="color:#e53935">자동 활용 실패 — 기본형(사전형)인지 확인하세요.</span>'; return; }
-  const head = entry
-    ? `<span style="color:#2e7d32;font-weight:700">✓ 사전 확인</span> ${ruby(c.dict.k, c.dict.h)} (${entry.m}) · <b>${GROUP_NAME[c.group]}</b>`
-    : `<span style="color:#e65100;font-weight:700">ⓘ 사전에 없는 동사</span> — 입력값으로 추가 · <b>${GROUP_NAME[c.group]}</b>`;
+  let head;
+  if (entry && viaConj) head = `<span style="color:#3b5bdb;font-weight:700">🔄 기본형 인식</span> ${ruby(c.dict.k, c.dict.h)} (${entry.m}) · <b>${GROUP_NAME[c.group]}</b>`;
+  else if (entry)        head = `<span style="color:#2e7d32;font-weight:700">✓ 사전 확인</span> ${ruby(c.dict.k, c.dict.h)} (${entry.m}) · <b>${GROUP_NAME[c.group]}</b>`;
+  else                   head = `<span style="color:#e65100;font-weight:700">ⓘ 사전에 없는 동사</span> — 입력값으로 추가 · <b>${GROUP_NAME[c.group]}</b>`;
   el.innerHTML = head + `<br>ます: ${c.masu.h} ・ ない: ${c.nai.h} ・ た: ${c.ta.h} ・ <b>て: ${c.te.h}</b>`;
 }
 
