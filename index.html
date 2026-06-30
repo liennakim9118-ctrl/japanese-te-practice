@@ -335,6 +335,44 @@ ruby rt {
 }
 .check-sub { color: #888; font-size: clamp(11px, 3vw, 13px); }
 .section-title { font-size: 13px; font-weight: 700; color: #555; margin: 18px 0 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+/* ── Bookmark button ── */
+.card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.card-top .form-badge { margin-bottom: 0; }
+.bookmark-btn {
+  background: none; border: none; font-size: 22px; line-height: 1;
+  padding: 4px 6px; border-radius: 8px; cursor: pointer; opacity: 0.55;
+  touch-action: manipulation; transition: transform 0.1s, opacity 0.15s;
+}
+.bookmark-btn:active { transform: scale(0.88); }
+
+/* ── Review banner ── */
+.review-banner {
+  display: none; align-items: center; justify-content: space-between; gap: 10px;
+  background: #fff3e0; color: #e65100; border: 1.5px solid #ffcc80;
+  border-radius: 12px; padding: 10px 14px; margin-bottom: 12px;
+  font-size: clamp(12px, 3.4vw, 14px); font-weight: 700;
+}
+.review-banner.on { display: flex; }
+.review-banner button {
+  background: #e65100; color: white; border: none; border-radius: 8px;
+  padding: 8px 13px; font-size: 12px; font-weight: 700; cursor: pointer;
+  white-space: nowrap; touch-action: manipulation;
+}
+
+/* ── Review list ── */
+.review-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 11px 0; border-bottom: 1px solid #f0f0f0; gap: 10px;
+}
+.review-row .rv-main { font-size: clamp(13px, 3.6vw, 15px); }
+.review-row .rv-sub { font-size: 11px; color: #888; margin-top: 3px; }
+.rv-tag-wrong { color: #e53935; font-weight: 700; }
+.rv-tag-mark  { color: #f9a825; font-weight: 700; }
+.rv-del { background: none; border: none; color: #ccc; font-size: 18px; cursor: pointer; padding: 4px 8px; flex-shrink: 0; }
+.rv-del:active { color: #e53935; }
+.empty-msg { color: #999; font-size: 14px; text-align: center; padding: 26px 6px; line-height: 1.7; }
+.review-badge { color: #e65100; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -346,9 +384,18 @@ ruby rt {
 
 <div class="main">
 
+  <!-- Review mode banner -->
+  <div class="review-banner" id="review-banner">
+    <span id="review-banner-text">🔖 복습 모드</span>
+    <button onclick="exitReview(false)">복습 종료</button>
+  </div>
+
   <!-- Problem Card -->
   <div class="card" id="problem-card">
-    <span class="form-badge" id="given-form-label">기본형</span>
+    <div class="card-top">
+      <span class="form-badge" id="given-form-label">기본형</span>
+      <button class="bookmark-btn" id="bookmark-btn" onclick="toggleBookmark()" title="복습 목록에 저장">🔖</button>
+    </div>
     <div class="verb-display" id="verb-display"></div>
     <div class="question-text" id="question-text"></div>
     <div class="input-row">
@@ -374,7 +421,8 @@ ruby rt {
 
   <!-- Bottom bar -->
   <div class="bottom-bar">
-    <button class="icon-btn" onclick="openAddVerb()">＋ 동사 추가</button>
+    <button class="icon-btn" onclick="openReview()">🔖 복습 <span class="review-badge" id="review-badge"></span></button>
+    <button class="icon-btn" onclick="openAddVerb()">＋ 동사</button>
     <button class="icon-btn" onclick="openStats()">📊 통계</button>
     <button class="icon-btn" onclick="openSettings()">⚙️ 설정</button>
   </div>
@@ -460,6 +508,18 @@ ruby rt {
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeModal('modal-settings')">취소</button>
       <button class="btn-confirm" onclick="saveSettings()">저장 후 새 문제</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───── Review Modal ───── -->
+<div class="modal-overlay" id="modal-review">
+  <div class="modal">
+    <h2>🔖 복습 목록</h2>
+    <div id="review-list"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modal-review')">닫기</button>
+      <button class="btn-confirm" id="start-review-btn" onclick="startReview()">복습 시작</button>
     </div>
   </div>
 </div>
@@ -551,6 +611,15 @@ try {
 
 let stats = { total:0, correct:0, streak:0, wrongMap:{} };
 
+// 복습 컬렉션: { "のむ|te_shimau": { v:<verb>, t:'te_shimau', w:오답횟수, m:태깅여부 } }
+let review = {};
+try { review = JSON.parse(localStorage.getItem('jp_review') || '{}'); } catch(e) {}
+function saveReview() { localStorage.setItem('jp_review', JSON.stringify(review)); }
+const rkey = (verb, target) => verb.dict.h + '|' + target.id;
+
+let reviewMode = false;
+let reviewQueue = [];
+
 let cur = {};
 
 // ═══════════════════════════════════════════════════
@@ -570,6 +639,7 @@ function allVerbs() { return [...BASE_VERBS, ...customVerbs]; }
 // QUESTION
 // ═══════════════════════════════════════════════════
 function newQuestion() {
+  if (reviewMode) { newReviewQuestion(); return; }
   const verbs = allVerbs();
   const verb  = rand(verbs);
 
@@ -614,6 +684,7 @@ function newQuestion() {
   document.getElementById('result-card').className = 'result-card';
   document.getElementById('next-btn').style.display = 'none';
   document.getElementById('submit-btn').style.display = '';
+  updateBookmarkBtn();
   inp.focus();
 }
 
@@ -643,6 +714,7 @@ function checkAnswer() {
   if (ok) {
     stats.correct++;
     stats.streak++;
+    if (reviewMode) handleReviewCorrect();
     inp.className = 'answer-input correct';
     rc.className = 'result-card correct';
     document.getElementById('result-title').className = 'result-title correct';
@@ -654,6 +726,7 @@ function checkAnswer() {
     stats.streak = 0;
     stats.wrongMap[verb.dict.h] = (stats.wrongMap[verb.dict.h] || { k: verb.dict.k, cnt:0 });
     stats.wrongMap[verb.dict.h].cnt++;
+    addWrong(verb, target);
     inp.className = 'answer-input wrong';
     rc.className = 'result-card wrong';
     document.getElementById('result-title').className = 'result-title wrong';
@@ -767,6 +840,147 @@ function saveSettings() {
 
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
+// ═══════════════════════════════════════════════════
+// REVIEW (복습)
+// ═══════════════════════════════════════════════════
+const targetLabel = tid => { const d = DERIVATIVES.find(x=>x.id===tid); return d ? d.label : tid; };
+
+function updateReviewBadge() {
+  const n = Object.keys(review).length;
+  const b = document.getElementById('review-badge');
+  if (b) b.textContent = n ? `(${n})` : '';
+}
+
+function updateBookmarkBtn() {
+  const btn = document.getElementById('bookmark-btn');
+  if (!cur.verb || !cur.target) { btn.textContent = '🔖'; btn.style.opacity = 0.55; return; }
+  const it = review[rkey(cur.verb, cur.target)];
+  const marked = !!(it && it.m);
+  btn.textContent = marked ? '⭐' : '🔖';
+  btn.style.opacity = marked ? 1 : 0.55;
+}
+
+// 오답 시 자동으로 복습 컬렉션에 추가 (오답 횟수 누적)
+function addWrong(verb, target) {
+  const k = rkey(verb, target);
+  if (!review[k]) review[k] = { v: verb, t: target.id, w: 0, m: false };
+  review[k].w++;
+  saveReview();
+  updateReviewBadge();
+}
+
+// 🔖 버튼: 현재 문제 태깅 토글
+function toggleBookmark() {
+  if (!cur.verb || !cur.target) return;
+  const k = rkey(cur.verb, cur.target);
+  if (review[k]) {
+    review[k].m = !review[k].m;
+    if (!review[k].m && review[k].w === 0) delete review[k];   // 오답기록 없고 태깅 해제 → 완전 삭제
+  } else {
+    review[k] = { v: cur.verb, t: cur.target.id, w: 0, m: true };
+  }
+  saveReview();
+  updateBookmarkBtn();
+  updateReviewBadge();
+}
+
+// 복습 모드에서 정답 시: 태깅 안 된 오답 문제는 마스터 처리(목록에서 제거)
+function handleReviewCorrect() {
+  const k = rkey(cur.verb, cur.target);
+  const it = review[k];
+  if (it && !it.m) {
+    delete review[k];
+    saveReview();
+    reviewQueue = reviewQueue.filter(x => x !== k);
+  }
+  updateReviewBadge();
+}
+
+function openReview() {
+  renderReviewList();
+  document.getElementById('modal-review').classList.add('open');
+}
+
+function renderReviewList() {
+  const keys = Object.keys(review);
+  const list = document.getElementById('review-list');
+  const startBtn = document.getElementById('start-review-btn');
+  if (!keys.length) {
+    list.innerHTML = '<div class="empty-msg">아직 저장된 복습 문제가 없어요.<br>문제를 <b>틀리거나</b> 🔖 버튼으로 <b>저장</b>하면 여기에 모입니다.</div>';
+    startBtn.style.display = 'none';
+    return;
+  }
+  startBtn.style.display = '';
+  const rows = keys.map(k => ({ k, ...review[k] }))
+    .sort((a,b) => (b.w - a.w) || (b.m - a.m));
+  list.innerHTML = rows.map(r => {
+    const v = r.v, tl = targetLabel(r.t);
+    const tags = [];
+    if (r.w) tags.push(`<span class="rv-tag-wrong">❌ ${r.w}회</span>`);
+    if (r.m) tags.push(`<span class="rv-tag-mark">⭐ 저장</span>`);
+    return `<div class="review-row">
+      <div>
+        <div class="rv-main">${ruby(v.dict.k, v.dict.h)} <span style="color:#3b5bdb">→ ${tl}</span></div>
+        <div class="rv-sub">${v.meaning} &nbsp;·&nbsp; ${tags.join(' &nbsp; ')}</div>
+      </div>
+      <button class="rv-del" onclick="removeReviewItem('${r.k}')" title="삭제">🗑️</button>
+    </div>`;
+  }).join('');
+}
+
+function removeReviewItem(k) {
+  delete review[k];
+  saveReview();
+  reviewQueue = reviewQueue.filter(x => x !== k);
+  renderReviewList();
+  updateReviewBadge();
+}
+
+function startReview() {
+  const keys = Object.keys(review);
+  if (!keys.length) return;
+  reviewQueue = keys.slice();
+  reviewMode = true;
+  closeModal('modal-review');
+  document.getElementById('review-banner').classList.add('on');
+  newQuestion();
+}
+
+function newReviewQuestion() {
+  reviewQueue = reviewQueue.filter(k => review[k]);   // 삭제된 항목 정리
+  if (!reviewQueue.length) { exitReview(true); return; }
+
+  const k = rand(reviewQueue);
+  const it = review[k];
+  const verb = it.v;
+  const target = DERIVATIVES.find(d => d.id === it.t) || DERIVATIVES[0];
+  cur = { verb, target };
+
+  document.getElementById('review-banner-text').textContent = `🔖 복습 모드 · 남은 문제 ${reviewQueue.length}개`;
+  document.getElementById('given-form-label').textContent = '기본형';
+  document.getElementById('verb-display').innerHTML = ruby(verb.dict.k, verb.dict.h);
+  document.getElementById('question-text').innerHTML =
+    `<b>${verb.meaning}</b>을(를) 뜻하는 동사를<br>` +
+    `<span class="target-badge">${target.label} &nbsp;(${target.meaning})</span>&nbsp; 으로 변환하세요.`;
+
+  const inp = document.getElementById('answer-input');
+  inp.value = ''; inp.className = 'answer-input'; inp.disabled = false;
+  document.getElementById('result-card').style.display = 'none';
+  document.getElementById('result-card').className = 'result-card';
+  document.getElementById('next-btn').style.display = 'none';
+  document.getElementById('submit-btn').style.display = '';
+  updateBookmarkBtn();
+  inp.focus();
+}
+
+function exitReview(completed) {
+  reviewMode = false;
+  reviewQueue = [];
+  document.getElementById('review-banner').classList.remove('on');
+  if (completed) alert('복습 완료! 틀렸던 문제를 모두 맞혔어요. 🎉\n(⭐ 저장한 문제는 목록에 그대로 남아있습니다.)');
+  newQuestion();
+}
+
 document.querySelectorAll('.modal-overlay').forEach(el => {
   el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); });
 });
@@ -778,6 +992,7 @@ document.getElementById('submit-btn').addEventListener('click', checkAnswer);
 document.getElementById('answer-input').addEventListener('keydown', e => { if (e.key === 'Enter') checkAnswer(); });
 document.getElementById('next-btn').addEventListener('click', newQuestion);
 
+updateReviewBadge();
 newQuestion();
 </script>
 </body>
