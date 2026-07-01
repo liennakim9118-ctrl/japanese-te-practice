@@ -778,14 +778,32 @@ const isVerbEnabled = v => !disabledVerbs.has(v.dict.h);
 function quizVerbs() { return allVerbs().filter(isVerbEnabled); }
 let verbSetDirty = false;   // 출제 동사 변경 시 모달 닫을 때 새 문제 생성
 
+// ── 셔플백: 전체를 한 바퀴 다 낸 뒤 재섞기 (중복 체감 감소) ──
+const bags = { te: { sig:'', items:[], last:null }, memo: { sig:'', items:[], last:null } };
+function shuffle(a) { for (let i=a.length-1; i>0; i--) { const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function drawVerb(mode) {
+  const verbs = quizVerbs();
+  if (!verbs.length) return null;
+  const bag = bags[mode];
+  const sig = verbs.map(v => v.dict.h).join('|');   // 출제 동사 구성이 바뀌면 백 재생성
+  if (bag.sig !== sig || bag.items.length === 0) {
+    bag.sig = sig;
+    bag.items = shuffle(verbs.slice());
+    if (verbs.length > 1 && bag.last && bag.items[0].dict.h === bag.last) bag.items.push(bag.items.shift()); // 직전과 연속 방지
+  }
+  const v = bag.items.shift();
+  bag.last = v.dict.h;
+  return v;
+}
+
 // ═══════════════════════════════════════════════════
 // QUESTION
 // ═══════════════════════════════════════════════════
 function newQuestion() {
   rolloverStats();
   if (reviewMode) { newReviewQuestion(); return; }
-  const verbs = quizVerbs();
-  if (!verbs.length) {
+  const verb = drawVerb('te');
+  if (!verb) {
     document.getElementById('given-form-label').textContent = '안내';
     document.getElementById('verb-display').innerHTML = '🚫';
     document.getElementById('question-text').innerHTML = '출제할 동사가 없어요.<br><b>＋ 동사</b> 목록에서 체크박스를 켜서 동사를 활성화해 주세요.';
@@ -796,7 +814,6 @@ function newQuestion() {
     document.getElementById('result-card').style.display = 'none';
     return;
   }
-  const verb  = rand(verbs);
 
   const enabledD = DERIVATIVES.filter(d => settings.derivs.includes(d.id));
   const enabledG = GIVEN_FORMS .filter(f => settings.givens.includes(f.id));
@@ -1405,9 +1422,8 @@ function matchMeaning(user, meaning) {
 function newMemoQuestion() {
   rolloverMemoStats();
   if (memoReviewMode) { newMemoReviewQuestion(); return; }
-  const verbs = quizVerbs();
-  if (!verbs.length) { memoEmpty(); return; }
-  const verb = rand(verbs);
+  const verb = drawVerb('memo');
+  if (!verb) { memoEmpty(); return; }
   const dir = memoBidir ? rand(['jp2ko','ko2jp']) : 'jp2ko';
   renderMemo(verb, dir);
 }
