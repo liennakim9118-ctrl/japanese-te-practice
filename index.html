@@ -1091,8 +1091,10 @@ function updatePreview() {
     return;
   }
   const dup = allVerbs().some(v => v.dict.h === c.dict.h);
+  const okuBad = c.dict.k.slice(-1) !== c.dict.h.slice(-1);   // 한자·히라가나 끝 글자 불일치
   let head;
-  if (dup)                    head = `<span style="color:#e53935;font-weight:700">⚠️ 이미 있는 동사</span> ${ruby(c.dict.k, c.dict.h)} — 중복 추가 불가`;
+  if (okuBad)                 head = `<span style="color:#e53935;font-weight:700">⚠️ 한자·히라가나 불일치</span> ${ruby(c.dict.k, c.dict.h)} — 끝 글자가 달라요 (예: 渡す→わたす)`;
+  else if (dup)               head = `<span style="color:#e53935;font-weight:700">⚠️ 이미 있는 동사</span> ${ruby(c.dict.k, c.dict.h)} — 중복 추가 불가`;
   else if (entry && viaConj)  head = `<span style="color:#3b5bdb;font-weight:700">🔄 기본형 인식</span> ${ruby(c.dict.k, c.dict.h)} (${entry.m}) · <b>${GROUP_NAME[c.group]}</b>`;
   else if (entry)             head = `<span style="color:#2e7d32;font-weight:700">✓ 사전 확인</span> ${ruby(c.dict.k, c.dict.h)} (${entry.m}) · <b>${GROUP_NAME[c.group]}</b>`;
   else                        head = `<span style="color:#e65100;font-weight:700">ⓘ 사전에 없는 동사</span> — 입력값으로 추가 · <b>${GROUP_NAME[c.group]}</b>`;
@@ -1103,6 +1105,10 @@ function confirmAddVerb() {
   const { dictH, meaning, entry, c } = resolveAdd();
   if (!dictH) { alert('기본형 히라가나를 입력해 주세요. (예: のむ)'); return; }
   if (!c) { alert('활용형을 자동 생성하지 못했어요.\n기본형(사전형)을 히라가나로 입력했는지 확인해 주세요. (예: のむ, たべる)'); return; }
+  if (c.dict.k.slice(-1) !== c.dict.h.slice(-1)) {
+    alert(`한자와 히라가나가 맞지 않아요.\n한자 '${c.dict.k}'와 읽기 '${c.dict.h}'의 끝 글자가 달라요.\n둘 중 하나를 확인해 주세요. (예: 渡す → わたす / 渡る → わたる)`);
+    return;
+  }
   if (!meaning) { alert('의미를 입력해 주세요.'); return; }
   // 중복 동사 차단 (기본+커스텀 통틀어 같은 기본형이 있으면 거부)
   if (allVerbs().some(v => v.dict.h === c.dict.h)) {
