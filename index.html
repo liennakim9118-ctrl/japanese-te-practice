@@ -391,6 +391,22 @@ ruby rt {
 .vrow-check { display: flex; align-items: center; flex-shrink: 0; }
 .vrow-check input { width: 20px; height: 20px; accent-color: #3b5bdb; cursor: pointer; }
 .review-row.off { opacity: 0.4; }
+
+/* ── Mode tabs (て형 / 암기) ── */
+.mode-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.mode-tab {
+  flex: 1; padding: 11px; border-radius: 12px; border: 1.5px solid #dfe3ee;
+  background: white; color: #666; font-size: clamp(13px, 3.6vw, 15px); font-weight: 700;
+  cursor: pointer; min-height: 46px; touch-action: manipulation; transition: all 0.15s;
+}
+.mode-tab.active { background: #3b5bdb; color: white; border-color: #3b5bdb; box-shadow: 0 2px 8px rgba(59,91,219,0.25); }
+.memo-meaning { font-family: 'Noto Sans KR', sans-serif; }
+.self-grade-btn {
+  margin-top: 10px; width: 100%; background: white; color: #2e7d32;
+  border: 1.5px solid #66bb6a; border-radius: 10px; padding: 11px;
+  font-size: clamp(12px, 3.4vw, 14px); font-weight: 700; cursor: pointer; touch-action: manipulation;
+}
+.self-grade-btn:active { background: #f1f8e9; }
 </style>
 </head>
 <body>
@@ -401,6 +417,15 @@ ruby rt {
 </div>
 
 <div class="main">
+
+  <!-- Mode tabs -->
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tab-te" onclick="setMode('te')">て형 연습</button>
+    <button class="mode-tab" id="tab-memo" onclick="setMode('memo')">암기 연습</button>
+  </div>
+
+  <!-- ===== て형 연습 뷰 ===== -->
+  <div id="te-view">
 
   <!-- Review mode banner -->
   <div class="review-banner" id="review-banner">
@@ -437,9 +462,43 @@ ruby rt {
   <!-- Next button -->
   <button class="next-btn" id="next-btn" style="display:none">다음 문제 →</button>
 
+  </div><!-- /te-view -->
+
+  <!-- ===== 암기 연습 뷰 ===== -->
+  <div id="memo-view" style="display:none">
+
+    <!-- Memo review banner -->
+    <div class="review-banner" id="memo-review-banner">
+      <span id="memo-review-banner-text">🧠 암기 복습 모드</span>
+      <button onclick="exitMemoReview(false)">복습 종료</button>
+    </div>
+
+    <div class="card" id="memo-card">
+      <div class="card-top">
+        <span class="form-badge" id="memo-form-label">뜻 맞히기</span>
+        <button class="bookmark-btn" id="memo-bookmark-btn" onclick="toggleMemoBookmark()" title="암기 복습에 저장">🔖</button>
+      </div>
+      <div class="verb-display" id="memo-display"></div>
+      <div class="question-text" id="memo-question"></div>
+      <div class="input-row">
+        <input type="text" class="answer-input" id="memo-input"
+          placeholder="정답 입력..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <button class="submit-btn" id="memo-submit">확인</button>
+      </div>
+    </div>
+
+    <div class="result-card" id="memo-result">
+      <div class="result-title" id="memo-result-title"></div>
+      <div id="memo-result-body"></div>
+    </div>
+
+    <button class="next-btn" id="memo-next" style="display:none">다음 문제 →</button>
+
+  </div><!-- /memo-view -->
+
   <!-- Bottom bar -->
   <div class="bottom-bar">
-    <button class="icon-btn" onclick="openReview()">🔖 복습 <span class="review-badge" id="review-badge"></span></button>
+    <button class="icon-btn" onclick="openReviewByMode()">🔖 복습 <span class="review-badge" id="review-badge"></span></button>
     <button class="icon-btn" onclick="openAddVerb()">＋ 동사</button>
     <button class="icon-btn" onclick="openStats()">📊 통계</button>
     <button class="icon-btn" onclick="openSettings()">⚙️ 설정</button>
@@ -512,6 +571,11 @@ ruby rt {
     <div id="deriv-checks"></div>
     <div class="section-title">주어진 형태 (문제 제시 방식)</div>
     <div id="given-checks"></div>
+    <div class="section-title">암기 연습</div>
+    <label class="check-label">
+      <input type="checkbox" id="memo-bidir-check">
+      <span>한↔일 랜덤 출제 <span class="check-sub">(끄면 일→한만: 일본어 보고 뜻 맞히기)</span></span>
+    </label>
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeModal('modal-settings')">취소</button>
       <button class="btn-confirm" onclick="saveSettings()">저장 후 새 문제</button>
@@ -519,14 +583,26 @@ ruby rt {
   </div>
 </div>
 
-<!-- ───── Review Modal ───── -->
+<!-- ───── Review Modal (て형) ───── -->
 <div class="modal-overlay" id="modal-review">
   <div class="modal">
-    <h2>🔖 복습 목록</h2>
+    <h2>🔖 て형 복습 목록</h2>
     <div id="review-list"></div>
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeModal('modal-review')">닫기</button>
       <button class="btn-confirm" id="start-review-btn" onclick="startReview()">복습 시작</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───── Memo Review Modal (암기) ───── -->
+<div class="modal-overlay" id="modal-memo-review">
+  <div class="modal">
+    <h2>🧠 암기 복습 목록</h2>
+    <div id="memo-review-list"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modal-memo-review')">닫기</button>
+      <button class="btn-confirm" id="start-memo-review-btn" onclick="startMemoReview()">복습 시작</button>
     </div>
   </div>
 </div>
@@ -631,8 +707,7 @@ function rolloverStats() {   // 날짜가 바뀌었으면 리셋
   if (stats.date !== kstDateStr()) {
     stats = { date: kstDateStr(), total:0, correct:0, streak:0, wrongMap:{} };
     saveStats();
-    const sd = document.getElementById('score-display');
-    if (sd) sd.textContent = '정답: 0 / 0';
+    if (document.getElementById('score-display')) updateScoreDisplay();
   }
 }
 
@@ -659,6 +734,29 @@ let reviewMode = false;
 let reviewQueue = [];
 
 let cur = {};
+
+// ═══════════════════════════════════════════════════
+// MEMO(암기) 상태
+// ═══════════════════════════════════════════════════
+let appMode = 'te';   // 'te' | 'memo'
+
+// 암기 일일 통계 (KST 00시 리셋, 별도 저장)
+let memoStats = { date: kstDateStr(), total:0, correct:0, streak:0, wrongMap:{} };
+try { const s = JSON.parse(localStorage.getItem('jp_memo_stats') || 'null'); if (s && s.date === kstDateStr()) memoStats = s; } catch(e) {}
+function saveMemoStats() { localStorage.setItem('jp_memo_stats', JSON.stringify(memoStats)); }
+function rolloverMemoStats() { if (memoStats.date !== kstDateStr()) { memoStats = { date: kstDateStr(), total:0, correct:0, streak:0, wrongMap:{} }; saveMemoStats(); } }
+
+// 암기 복습 컬렉션(별도): { 'のむ': { v:<verb>, w:오답수, m:태깅 } }
+let memoReview = {};
+try { memoReview = JSON.parse(localStorage.getItem('jp_memo_review') || '{}'); } catch(e) {}
+function saveMemoReview() { localStorage.setItem('jp_memo_review', JSON.stringify(memoReview)); }
+let memoReviewMode = false, memoReviewQueue = [];
+
+// 암기 방향 설정: false=일→한만, true=한↔일 랜덤
+let memoBidir = false;
+try { memoBidir = JSON.parse(localStorage.getItem('jp_memo_bidir') || 'false'); } catch(e) {}
+
+let memoCur = {};
 
 // ═══════════════════════════════════════════════════
 // HELPERS
@@ -805,7 +903,7 @@ function checkAnswer() {
       `</div>`;
   }
 
-  document.getElementById('score-display').textContent = `정답: ${stats.correct} / ${stats.total}`;
+  updateScoreDisplay();
   saveStats();
 }
 
@@ -1056,33 +1154,36 @@ function deleteCustomVerb(i) {
   renderVerbList();
 }
 
-// ── Stats ──
+// ── Stats (현재 모드 기준) ──
 function openStats() {
-  rolloverStats();
-  document.getElementById('st-total').textContent   = stats.total;
-  document.getElementById('st-correct').textContent = stats.correct;
-  document.getElementById('st-rate').textContent    = stats.total ? Math.round(stats.correct/stats.total*100)+'%' : '0%';
-  document.getElementById('st-streak').textContent  = stats.streak;
+  appMode === 'memo' ? rolloverMemoStats() : rolloverStats();
+  const s = appMode === 'memo' ? memoStats : stats;
+  document.getElementById('st-total').textContent   = s.total;
+  document.getElementById('st-correct').textContent = s.correct;
+  document.getElementById('st-rate').textContent    = s.total ? Math.round(s.correct/s.total*100)+'%' : '0%';
+  document.getElementById('st-streak').textContent  = s.streak;
 
-  const wrongs = Object.entries(stats.wrongMap)
+  const wrongs = Object.entries(s.wrongMap)
     .map(([h,v]) => ({ h, k:v.k, cnt:v.cnt }))
     .sort((a,b) => b.cnt - a.cnt).slice(0,5);
 
+  const modeLabel = appMode === 'memo' ? '암기' : 'て형';
   document.getElementById('wrong-list').innerHTML = wrongs.length
-    ? `<div style="font-size:12px;color:#888;margin-bottom:8px;font-weight:600">자주 틀리는 동사 TOP 5</div>` +
+    ? `<div style="font-size:12px;color:#888;margin-bottom:8px;font-weight:600">자주 틀리는 동사 TOP 5 (${modeLabel})</div>` +
       wrongs.map(w =>
         `<div class="wrong-row"><span>${ruby(w.k,w.h)}</span><span class="wrong-count">${w.cnt}회 오답</span></div>`
       ).join('')
-    : '';
+    : `<div style="font-size:12px;color:#aaa">${modeLabel} 연습 기록이 아직 없어요.</div>`;
 
   document.getElementById('modal-stats').classList.add('open');
 }
 
 function resetStats() {
-  if (!confirm('오늘 통계를 초기화하시겠습니까?')) return;
-  stats = { date: kstDateStr(), total:0, correct:0, streak:0, wrongMap:{} };
-  saveStats();
-  document.getElementById('score-display').textContent = '정답: 0 / 0';
+  const modeLabel = appMode === 'memo' ? '암기' : 'て형';
+  if (!confirm(`오늘 ${modeLabel} 통계를 초기화하시겠습니까?`)) return;
+  const fresh = { date: kstDateStr(), total:0, correct:0, streak:0, wrongMap:{} };
+  if (appMode === 'memo') { memoStats = fresh; saveMemoStats(); } else { stats = fresh; saveStats(); }
+  updateScoreDisplay();
   closeModal('modal-stats');
 }
 
@@ -1102,6 +1203,7 @@ function openSettings() {
     </label>`
   ).join('');
 
+  document.getElementById('memo-bidir-check').checked = memoBidir;
   document.getElementById('modal-settings').classList.add('open');
 }
 
@@ -1112,8 +1214,10 @@ function saveSettings() {
   if (!gc.length) { alert('주어진 형태를 최소 1개 선택하세요.'); return; }
   settings = { derivs:dc, givens:gc };
   localStorage.setItem('jp_settings', JSON.stringify(settings));
+  memoBidir = document.getElementById('memo-bidir-check').checked;
+  localStorage.setItem('jp_memo_bidir', JSON.stringify(memoBidir));
   closeModal('modal-settings');
-  newQuestion();
+  appMode === 'memo' ? newMemoQuestion() : newQuestion();
 }
 
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
@@ -1124,10 +1228,19 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 const targetLabel = tid => { const d = DERIVATIVES.find(x=>x.id===tid); return d ? d.label : tid; };
 
 function updateReviewBadge() {
-  const n = Object.keys(review).length;
+  const n = (appMode === 'memo' ? Object.keys(memoReview) : Object.keys(review)).length;
   const b = document.getElementById('review-badge');
   if (b) b.textContent = n ? `(${n})` : '';
 }
+
+// 헤더 점수판 (현재 모드 기준)
+function updateScoreDisplay() {
+  const s = appMode === 'memo' ? memoStats : stats;
+  document.getElementById('score-display').textContent = `정답: ${s.correct} / ${s.total}`;
+}
+
+// 복습 버튼: 현재 모드에 맞는 복습 목록 열기
+function openReviewByMode() { appMode === 'memo' ? openMemoReview() : openReview(); }
 
 function updateBookmarkBtn() {
   const btn = document.getElementById('bookmark-btn');
@@ -1259,6 +1372,226 @@ function exitReview(completed) {
   newQuestion();
 }
 
+// ═══════════════════════════════════════════════════
+// MEMO (암기 연습)
+// ═══════════════════════════════════════════════════
+function setMode(m) {
+  if (appMode === m) return;
+  appMode = m;
+  document.getElementById('tab-te').classList.toggle('active', m === 'te');
+  document.getElementById('tab-memo').classList.toggle('active', m === 'memo');
+  document.getElementById('te-view').style.display   = (m === 'te')   ? '' : 'none';
+  document.getElementById('memo-view').style.display = (m === 'memo') ? '' : 'none';
+  updateReviewBadge();
+  updateScoreDisplay();
+  if (m === 'memo') { if (!memoCur.verb) newMemoQuestion(); }
+  else              { if (!cur.verb)     newQuestion(); }
+}
+
+// 한글 뜻 느슨한 채점: 공백/괄호 제거 + 여러 뜻(/) 후보 + 어간 포함 허용
+const normKo = s => s.trim().replace(/\s/g,'').replace(/[()（）·]/g,'');
+function matchMeaning(user, meaning) {
+  const u = normKo(user);
+  if (!u) return false;
+  const cands = meaning.split('/').map(x => normKo(x.replace(/\(.*?\)/g,'').replace(/（.*?）/g,''))).filter(Boolean);
+  for (const c of cands) {
+    if (u === c) return true;
+    const stem = c.endsWith('다') ? c.slice(0, -1) : c;   // '마시다'→'마시'
+    if (stem.length >= 2 && (u.includes(stem) || (u.length >= 2 && stem.includes(u)))) return true;
+  }
+  return false;
+}
+
+function newMemoQuestion() {
+  rolloverMemoStats();
+  if (memoReviewMode) { newMemoReviewQuestion(); return; }
+  const verbs = quizVerbs();
+  if (!verbs.length) { memoEmpty(); return; }
+  const verb = rand(verbs);
+  const dir = memoBidir ? rand(['jp2ko','ko2jp']) : 'jp2ko';
+  renderMemo(verb, dir);
+}
+
+function renderMemo(verb, dir) {
+  memoCur = { verb, dir };
+  const label = document.getElementById('memo-form-label');
+  const disp  = document.getElementById('memo-display');
+  const q     = document.getElementById('memo-question');
+  const inp   = document.getElementById('memo-input');
+  if (dir === 'jp2ko') {
+    label.textContent = '뜻 맞히기 (일→한)';
+    disp.innerHTML = ruby(verb.dict.k, verb.dict.h);
+    q.innerHTML = '이 동사의 <b>한국어 뜻</b>을 입력하세요.';
+    inp.placeholder = '한국어 뜻 입력...';
+  } else {
+    label.textContent = '일본어 맞히기 (한→일)';
+    disp.innerHTML = `<span class="memo-meaning">${verb.meaning}</span>`;
+    q.innerHTML = '뜻에 맞는 <b>일본어 기본형</b>을 입력하세요. (히라가나 또는 한자)';
+    inp.placeholder = 'ひらがな 또는 한자...';
+  }
+  inp.value=''; inp.className='answer-input'; inp.disabled=false;
+  document.getElementById('memo-result').style.display='none';
+  document.getElementById('memo-result').className='result-card';
+  document.getElementById('memo-next').style.display='none';
+  document.getElementById('memo-submit').style.display='';
+  updateMemoBookmarkBtn();
+  inp.focus();
+}
+
+function memoEmpty() {
+  memoCur = {};
+  document.getElementById('memo-form-label').textContent = '안내';
+  document.getElementById('memo-display').innerHTML = '🚫';
+  document.getElementById('memo-question').innerHTML = '출제할 동사가 없어요. <b>＋ 동사</b>에서 체크박스를 켜주세요.';
+  const inp = document.getElementById('memo-input'); inp.value=''; inp.disabled=true;
+  document.getElementById('memo-submit').style.display='none';
+  document.getElementById('memo-next').style.display='none';
+  document.getElementById('memo-result').style.display='none';
+}
+
+function checkMemoAnswer() {
+  const inp = document.getElementById('memo-input');
+  const user = norm(inp.value);
+  if (!user) { inp.focus(); return; }
+  const { verb, dir } = memoCur;
+  const ok = dir === 'jp2ko'
+    ? matchMeaning(inp.value, verb.meaning)
+    : (user === norm(verb.dict.h) || user === norm(verb.dict.k));
+
+  memoStats.total++;
+  bumpVerbStat(verb, ok);
+  inp.disabled = true;
+  document.getElementById('memo-submit').style.display='none';
+  document.getElementById('memo-next').style.display='';
+
+  const rc = document.getElementById('memo-result');
+  rc.style.display='block';
+  const answerHtml = `${ruby(verb.dict.k, verb.dict.h)} = <span class="memo-meaning">${verb.meaning}</span>`;
+
+  if (ok) {
+    memoStats.correct++; memoStats.streak++;
+    if (memoReviewMode) handleMemoReviewCorrect();
+    inp.className='answer-input correct';
+    rc.className='result-card correct';
+    document.getElementById('memo-result-title').className='result-title correct';
+    document.getElementById('memo-result-title').textContent='✅ 정답!';
+    document.getElementById('memo-result-body').innerHTML = `<div class="correct-answer">${answerHtml}</div>`;
+  } else {
+    memoStats.streak=0;
+    memoStats.wrongMap[verb.dict.h] = (memoStats.wrongMap[verb.dict.h] || { k:verb.dict.k, cnt:0 });
+    memoStats.wrongMap[verb.dict.h].cnt++;
+    addMemoWrong(verb);
+    inp.className='answer-input wrong';
+    rc.className='result-card wrong';
+    document.getElementById('memo-result-title').className='result-title wrong';
+    document.getElementById('memo-result-title').textContent='❌ 오답';
+    document.getElementById('memo-result-body').innerHTML =
+      `<div style="font-size:12px;color:#999;margin-bottom:2px">정답</div>` +
+      `<div class="correct-answer">${answerHtml}</div>` +
+      `<button class="self-grade-btn" onclick="memoSelfCorrect()">✅ 사실 맞았어요 (정답 처리)</button>`;
+  }
+  updateScoreDisplay();
+  saveMemoStats();
+}
+
+// 자가 채점: 오답을 정답으로 정정
+function memoSelfCorrect() {
+  const verb = memoCur.verb;
+  if (!verb) return;
+  memoStats.correct++; memoStats.streak++;
+  const wm = memoStats.wrongMap[verb.dict.h];
+  if (wm) { wm.cnt--; if (wm.cnt <= 0) delete memoStats.wrongMap[verb.dict.h]; }
+  saveMemoStats();
+  const vs = verbStats[verb.dict.h];
+  if (vs) { vs.wrong = Math.max(0, vs.wrong - 1); vs.correct++; saveVerbStats(); }
+  const it = memoReview[verb.dict.h];
+  if (it) { it.w = Math.max(0, it.w - 1); if (it.w === 0 && !it.m) delete memoReview[verb.dict.h]; saveMemoReview(); }
+  if (memoReviewMode) handleMemoReviewCorrect();
+  const rc = document.getElementById('memo-result');
+  rc.className='result-card correct';
+  document.getElementById('memo-input').className='answer-input correct';
+  document.getElementById('memo-result-title').className='result-title correct';
+  document.getElementById('memo-result-title').textContent='✅ 정답 처리됨';
+  document.getElementById('memo-result-body').innerHTML =
+    `<div class="correct-answer">${ruby(verb.dict.k, verb.dict.h)} = <span class="memo-meaning">${verb.meaning}</span></div>`;
+  updateScoreDisplay();
+  updateMemoBookmarkBtn();
+  updateReviewBadge();
+}
+
+// ── 암기 복습(별도) ──
+function updateMemoBookmarkBtn() {
+  const btn = document.getElementById('memo-bookmark-btn');
+  if (!memoCur.verb) { btn.textContent='🔖'; btn.style.opacity=0.55; return; }
+  const it = memoReview[memoCur.verb.dict.h];
+  const marked = !!(it && it.m);
+  btn.textContent = marked ? '⭐' : '🔖';
+  btn.style.opacity = marked ? 1 : 0.55;
+}
+function addMemoWrong(verb) {
+  const h = verb.dict.h;
+  if (!memoReview[h]) memoReview[h] = { v:verb, w:0, m:false };
+  memoReview[h].w++;
+  saveMemoReview(); updateReviewBadge();
+}
+function toggleMemoBookmark() {
+  if (!memoCur.verb) return;
+  const h = memoCur.verb.dict.h;
+  if (memoReview[h]) { memoReview[h].m = !memoReview[h].m; if (!memoReview[h].m && memoReview[h].w === 0) delete memoReview[h]; }
+  else memoReview[h] = { v:memoCur.verb, w:0, m:true };
+  saveMemoReview(); updateMemoBookmarkBtn(); updateReviewBadge();
+}
+function handleMemoReviewCorrect() {
+  const h = memoCur.verb.dict.h;
+  const it = memoReview[h];
+  if (it && !it.m) { delete memoReview[h]; saveMemoReview(); memoReviewQueue = memoReviewQueue.filter(x => x !== h); }
+  updateReviewBadge();
+}
+function openMemoReview() { renderMemoReviewList(); document.getElementById('modal-memo-review').classList.add('open'); }
+function renderMemoReviewList() {
+  const keys = Object.keys(memoReview);
+  const list = document.getElementById('memo-review-list');
+  const startBtn = document.getElementById('start-memo-review-btn');
+  if (!keys.length) {
+    list.innerHTML = '<div class="empty-msg">저장된 암기 복습이 없어요.<br>틀리거나 🔖로 저장하면 여기에 모입니다.</div>';
+    startBtn.style.display='none'; return;
+  }
+  startBtn.style.display='';
+  const rows = keys.map(k => ({ k, ...memoReview[k] })).sort((a,b) => (b.w - a.w) || (b.m - a.m));
+  list.innerHTML = rows.map(r => {
+    const tags=[]; if (r.w) tags.push(`<span class="rv-tag-wrong">❌ ${r.w}회</span>`); if (r.m) tags.push(`<span class="rv-tag-mark">⭐ 저장</span>`);
+    return `<div class="review-row"><div>
+      <div class="rv-main">${ruby(r.v.dict.k, r.v.dict.h)} <span style="color:#888;font-weight:400">${r.v.meaning}</span></div>
+      <div class="rv-sub">${tags.join(' &nbsp; ')}</div>
+    </div><button class="rv-del" onclick="removeMemoReviewItem('${r.k}')" title="삭제">🗑️</button></div>`;
+  }).join('');
+}
+function removeMemoReviewItem(k) { delete memoReview[k]; saveMemoReview(); memoReviewQueue = memoReviewQueue.filter(x => x !== k); renderMemoReviewList(); updateReviewBadge(); }
+function startMemoReview() {
+  const keys = Object.keys(memoReview);
+  if (!keys.length) return;
+  memoReviewQueue = keys.slice();
+  memoReviewMode = true;
+  closeModal('modal-memo-review');
+  document.getElementById('memo-review-banner').classList.add('on');
+  newMemoQuestion();
+}
+function newMemoReviewQuestion() {
+  memoReviewQueue = memoReviewQueue.filter(k => memoReview[k]);
+  if (!memoReviewQueue.length) { exitMemoReview(true); return; }
+  const h = rand(memoReviewQueue);
+  const verb = memoReview[h].v;
+  const dir = memoBidir ? rand(['jp2ko','ko2jp']) : 'jp2ko';
+  document.getElementById('memo-review-banner-text').textContent = `🧠 암기 복습 · 남은 ${memoReviewQueue.length}개`;
+  renderMemo(verb, dir);
+}
+function exitMemoReview(completed) {
+  memoReviewMode = false; memoReviewQueue = [];
+  document.getElementById('memo-review-banner').classList.remove('on');
+  if (completed) alert('암기 복습 완료! 틀렸던 단어를 모두 맞혔어요. 🎉\n(⭐ 저장한 단어는 목록에 남아있습니다.)');
+  newMemoQuestion();
+}
+
 document.querySelectorAll('.modal-overlay').forEach(el => {
   el.addEventListener('click', e => {
     if (e.target !== el) return;
@@ -1274,10 +1607,14 @@ document.getElementById('submit-btn').addEventListener('click', checkAnswer);
 document.getElementById('answer-input').addEventListener('keydown', e => { if (e.key === 'Enter') checkAnswer(); });
 document.getElementById('next-btn').addEventListener('click', newQuestion);
 
+document.getElementById('memo-submit').addEventListener('click', checkMemoAnswer);
+document.getElementById('memo-input').addEventListener('keydown', e => { if (e.key === 'Enter') checkMemoAnswer(); });
+document.getElementById('memo-next').addEventListener('click', newMemoQuestion);
+
 ['a-dict-h','a-dict-k'].forEach(id => document.getElementById(id).addEventListener('input', updatePreview));
 document.getElementById('a-group').addEventListener('change', updatePreview);
 
-document.getElementById('score-display').textContent = `정답: ${stats.correct} / ${stats.total}`;
+updateScoreDisplay();
 updateReviewBadge();
 newQuestion();
 </script>
