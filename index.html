@@ -664,6 +664,8 @@ ruby rt {
     </label>
     <div class="section-title">활용 연습 (연습할 활용형)</div>
     <div id="conj-checks"></div>
+    <div class="section-title">🙈 숨김 목록 (복원·삭제)</div>
+    <div id="hidden-list"></div>
     <div style="font-size:11px;color:#aaa;margin-top:16px;line-height:1.6">
       내장 일-한 사전 출처: JMdict (EDRDG, 읽기) · 위키낱말사전 한국어판(ウィクショナリー, 뜻) — CC BY-SA
     </div>
@@ -1358,22 +1360,22 @@ function deleteCustomVerb(i) {
 // ── 표현(단어·구) 관리 ──
 let vocabDirty = false;
 const jdict = k => (window.JDICT || {})[k];   // 내장 일-한 사전 [읽기, 뜻]
+let vAutoH = false, vAutoM = false;   // 읽기·뜻이 '자동완성된 값'인지 (사용자 수정 시 false)
 function updateVocabPreview() {
+  const hBox = document.getElementById('v-h'), mBox = document.getElementById('v-meaning');
   const k = document.getElementById('v-k').value.trim();
   const el = document.getElementById('v-preview');
-  if (!k) { el.innerHTML = ''; return; }
+  if (!k) { if (vAutoH) hBox.value = ''; if (vAutoM) mBox.value = ''; el.innerHTML = ''; return; }
   const e = jdict(k);
-  if (e) {
-    const [r, m] = e;
-    const hBox = document.getElementById('v-h'), mBox = document.getElementById('v-meaning');
-    if (r && !hBox.value.trim()) hBox.value = r;       // 읽기 자동완성
-    if (m && !mBox.value.trim()) mBox.value = m;       // 뜻 자동 제안
-    el.innerHTML = `<span style="color:#2e7d32;font-weight:700">✓ 사전</span> ${k}${r ? ' ['+r+']' : ''} · ${m || '(뜻 없음 — 직접 입력)'}`;
-  } else {
-    el.innerHTML = `<span style="color:#e65100;font-weight:700">ⓘ 사전에 없음</span> — 읽기·뜻 직접 입력 (구·문장은 보통 여기)`;
-  }
+  const r = e ? e[0] : '', m = e ? e[1] : '';
+  // 자동완성 값이거나 비어있으면 → 항상 '최종 입력' 기준으로 갱신
+  if (vAutoH || !hBox.value.trim()) { hBox.value = r; vAutoH = true; }
+  if (vAutoM || !mBox.value.trim()) { mBox.value = m; vAutoM = true; }
+  el.innerHTML = e
+    ? `<span style="color:#2e7d32;font-weight:700">✓ 사전</span> ${k}${r ? ' ['+r+']' : ''} · ${m || '(뜻 없음 — 직접 입력)'}`
+    : `<span style="color:#e65100;font-weight:700">ⓘ 사전에 없음</span> — 읽기·뜻 직접 입력 (구·문장은 보통 여기)`;
 }
-function openVocab() { updateVocabPreview(); renderVocabList(); document.getElementById('modal-vocab').classList.add('open'); }
+function openVocab() { vAutoH = false; vAutoM = false; updateVocabPreview(); renderVocabList(); document.getElementById('modal-vocab').classList.add('open'); }
 function closeVocab() {
   closeModal('modal-vocab');
   if (vocabDirty && !memoReviewMode) { vocabDirty = false; if (appMode === 'memo') newMemoQuestion(); }
@@ -1387,6 +1389,7 @@ function confirmAddVocab() {
   vocab.push({ dict:{k,h}, meaning, exJp:g('v-ex-jp'), exKo:g('v-ex-ko'), custom:true, isVocab:true });
   saveVocab();
   ['v-k','v-h','v-meaning','v-ex-jp','v-ex-ko'].forEach(id => { document.getElementById(id).value = ''; });
+  vAutoH = false; vAutoM = false;
   vocabDirty = true;
   renderVocabList();
   alert(`"${k}" 표현 추가 완료!`);
@@ -1424,12 +1427,25 @@ function renderVocabList() {
   let rows = memoListRows();
   if (q) rows = rows.filter(o => (o.v.dict.k + ' ' + o.v.dict.h + ' ' + o.v.meaning).includes(q));
   const vis = rows.filter(o => !hidden.has(vkey(o.v)));
-  const hid = rows.filter(o => hidden.has(vkey(o.v)));
   const list = document.getElementById('vocab-list');
-  let html = `<div style="font-size:11px;color:#999;margin-bottom:6px">암기 출제 ${vis.length}개 · 왼쪽 ☑︎=활용/て형 연습 포함(동사) · 🙈=숨김</div>`;
+  let html = `<div style="font-size:11px;color:#999;margin-bottom:6px">암기 출제 ${vis.length}개 · 왼쪽 ☑︎=활용/て형 연습 포함(동사) · 🙈=숨김 (숨긴 항목은 ⚙️설정에서 관리)</div>`;
   html += vis.length ? vis.map(o => memoRowHtml(o, false)).join('') : '<div class="empty-msg">항목이 없어요.</div>';
-  if (hid.length) html += `<div class="section-title" style="margin-top:16px">🙈 숨김 목록 (${hid.length})</div>` + hid.map(o => memoRowHtml(o, true)).join('');
   list.innerHTML = html;
+}
+// 숨김 목록 (설정 메뉴)
+function renderHiddenList() {
+  const el = document.getElementById('hidden-list');
+  if (!el) return;
+  const rows = memoListRows().filter(o => hidden.has(vkey(o.v)));
+  if (!rows.length) { el.innerHTML = '<div style="font-size:12px;color:#aaa">숨긴 항목이 없어요.</div>'; return; }
+  el.innerHTML = rows.map(o => {
+    const v = o.v;
+    const del = o.del ? `<button class="rv-del" onclick="deleteMemoItem('${o.del}','${vkey(v)}')" title="삭제">🗑️</button>` : '';
+    return `<div class="review-row">
+      <div style="flex:1"><div class="rv-main">${ruby(v.dict.k, v.dict.h)} <span style="color:#888;font-weight:400">${v.meaning}</span> <span style="font-size:10px;color:#3b5bdb;font-weight:700">${o.kind}${o.del ? '·내' : ''}</span></div></div>
+      <button class="rv-del" style="color:#3b5bdb" onclick="toggleHidden('${vkey(v)}')" title="복원">↩︎ 복원</button>${del}
+    </div>`;
+  }).join('');
 }
 // 동사 활용/て형 연습 포함 토글 (disabledVerbs)
 function toggleConjInclude(key) {
@@ -1443,7 +1459,7 @@ function toggleHidden(key) {
   hidden.has(key) ? hidden.delete(key) : hidden.add(key);
   localStorage.setItem('jp_hidden', JSON.stringify([...hidden]));
   verbSetDirty = true; vocabDirty = true;
-  renderVocabList();
+  renderVocabList(); renderHiddenList();
 }
 function deleteMemoItem(kind, key) {
   if (kind === 'verb') {
@@ -1460,7 +1476,7 @@ function deleteMemoItem(kind, key) {
     saveVocab();
   }
   vocabDirty = true;
-  renderVocabList();
+  renderVocabList(); renderHiddenList();
 }
 
 // ── Stats (현재 모드 기준) ──
@@ -1515,6 +1531,7 @@ function openSettings() {
   ).join('');
 
   document.getElementById('memo-bidir-check').checked = memoBidir;
+  renderHiddenList();
 
   document.getElementById('conj-checks').innerHTML = CONJ_FORMS.map(f =>
     `<label class="check-label">
@@ -2107,6 +2124,8 @@ document.getElementById('conj-input').addEventListener('keydown', e => { if (e.k
 document.getElementById('conj-next').addEventListener('click', newConjQuestion);
 
 document.getElementById('v-k').addEventListener('input', updateVocabPreview);
+document.getElementById('v-h').addEventListener('input', () => { vAutoH = false; });
+document.getElementById('v-meaning').addEventListener('input', () => { vAutoM = false; });
 document.getElementById('vocab-search').addEventListener('input', renderVocabList);
 
 if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(()=>{}));
