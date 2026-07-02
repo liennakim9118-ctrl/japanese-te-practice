@@ -737,9 +737,12 @@ const CONJ_FORMS = [
   { id:'cond', label:'조건형 (~ば)',          nuance:'~하면' },
   { id:'imp',  label:'명령형 (~え·ろ)',       nuance:'~해라' },
   { id:'proh', label:'금지형 (기본형+な)',    nuance:'~하지 마라' },
+  { id:'pass', label:'수동형 (~れる·られる)', nuance:'~당하다 / ~받다' },
+  { id:'caus', label:'사역형 (~せる·させる)', nuance:'~하게 하다 / 시키다' },
 ];
 const E_ROW = {'う':'え','く':'け','ぐ':'げ','す':'せ','つ':'て','ぬ':'ね','ぶ':'べ','む':'め','る':'れ'};
 const O_ROW = {'う':'お','く':'こ','ぐ':'ご','す':'そ','つ':'と','ぬ':'の','ぶ':'ぼ','む':'も','る':'ろ'};
+const A_ROW = {'う':'わ','く':'か','ぐ':'が','す':'さ','つ':'た','ぬ':'な','ぶ':'ば','む':'ま','る':'ら'};
 
 // 동사(dict/masu/nai/ta/te/group 보유)에서 활용형 {k,h} 산출
 function conjForm(verb, id) {
@@ -752,18 +755,18 @@ function conjForm(verb, id) {
   if (g === 3) {
     if (dh.endsWith('する')) {
       const bk = dk.slice(0,-2), bh = dh.slice(0,-2);
-      const s = { pot:'できる', imp:'しろ', cond:'すれば', vol:'しよう' }[id];
+      const s = { pot:'できる', imp:'しろ', cond:'すれば', vol:'しよう', pass:'される', caus:'させる' }[id];
       return { k: bk + s, h: bh + s };
     } else { // くる / 来る (읽기 변화)
       const kStem = dk.slice(0,-1);
-      const H = { pot:'こられる', imp:'こい', cond:'くれば', vol:'こよう' };
-      const K = { pot:kStem+'られる', imp:kStem+'い', cond:kStem+'れば', vol:kStem+'よう' };
+      const H = { pot:'こられる', imp:'こい', cond:'くれば', vol:'こよう', pass:'こられる', caus:'こさせる' };
+      const K = { pot:kStem+'られる', imp:kStem+'い', cond:kStem+'れば', vol:kStem+'よう', pass:kStem+'られる', caus:kStem+'させる' };
       return { k: (dk === dh ? H[id] : K[id]), h: H[id] };
     }
   }
   if (g === 2) {
     const ks = dk.slice(0,-1), hs = dh.slice(0,-1);
-    const s = { pot:'られる', imp:'ろ', cond:'れば', vol:'よう' }[id];
+    const s = { pot:'られる', imp:'ろ', cond:'れば', vol:'よう', pass:'られる', caus:'させる' }[id];
     return { k: ks + s, h: hs + s };
   }
   // g === 1 (godan)
@@ -773,6 +776,8 @@ function conjForm(verb, id) {
   else if (id === 'imp')  s = E_ROW[last];
   else if (id === 'cond') s = E_ROW[last] + 'ば';
   else if (id === 'vol')  s = O_ROW[last] + 'う';
+  else if (id === 'pass') s = A_ROW[last] + 'れる';
+  else if (id === 'caus') s = A_ROW[last] + 'せる';
   return { k: ks + s, h: hs + s };
 }
 const conjLabel = id => { const f = CONJ_FORMS.find(x=>x.id===id); return f ? f.label : id; };
