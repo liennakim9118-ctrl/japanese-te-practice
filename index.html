@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="て형 연습">
 <link rel="manifest" href="manifest.json">
+<script defer src="dict.js"></script>
 <title>일본어 て형 연습</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -595,6 +596,7 @@ ruby rt {
       <label>뜻 (한국어, 필수)</label>
       <input id="v-meaning" placeholder="날씨" style="font-family:inherit">
     </div>
+    <div class="conj-preview" id="v-preview"></div>
     <div class="form-group">
       <label>예문 — 원문 (선택)</label>
       <input id="v-ex-jp" placeholder="今日はいい天気ですね。">
@@ -659,6 +661,9 @@ ruby rt {
     </label>
     <div class="section-title">활용 연습 (연습할 활용형)</div>
     <div id="conj-checks"></div>
+    <div style="font-size:11px;color:#aaa;margin-top:16px;line-height:1.6">
+      내장 일-한 사전 출처: JMdict (EDRDG, 읽기) · 위키낱말사전 한국어판(ウィクショナリー, 뜻) — CC BY-SA
+    </div>
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeModal('modal-settings')">취소</button>
       <button class="btn-confirm" onclick="saveSettings()">저장 후 새 문제</button>
@@ -1345,7 +1350,23 @@ function deleteCustomVerb(i) {
 
 // ── 표현(단어·구) 관리 ──
 let vocabDirty = false;
-function openVocab() { renderVocabList(); document.getElementById('modal-vocab').classList.add('open'); }
+const jdict = k => (window.JDICT || {})[k];   // 내장 일-한 사전 [읽기, 뜻]
+function updateVocabPreview() {
+  const k = document.getElementById('v-k').value.trim();
+  const el = document.getElementById('v-preview');
+  if (!k) { el.innerHTML = ''; return; }
+  const e = jdict(k);
+  if (e) {
+    const [r, m] = e;
+    const hBox = document.getElementById('v-h'), mBox = document.getElementById('v-meaning');
+    if (r && !hBox.value.trim()) hBox.value = r;       // 읽기 자동완성
+    if (m && !mBox.value.trim()) mBox.value = m;       // 뜻 자동 제안
+    el.innerHTML = `<span style="color:#2e7d32;font-weight:700">✓ 사전</span> ${k}${r ? ' ['+r+']' : ''} · ${m || '(뜻 없음 — 직접 입력)'}`;
+  } else {
+    el.innerHTML = `<span style="color:#e65100;font-weight:700">ⓘ 사전에 없음</span> — 읽기·뜻 직접 입력 (구·문장은 보통 여기)`;
+  }
+}
+function openVocab() { updateVocabPreview(); renderVocabList(); document.getElementById('modal-vocab').classList.add('open'); }
 function closeVocab() {
   closeModal('modal-vocab');
   if (vocabDirty && !memoReviewMode) { vocabDirty = false; if (appMode === 'memo') newMemoQuestion(); }
@@ -2029,6 +2050,10 @@ document.getElementById('memo-next').addEventListener('click', newMemoQuestion);
 document.getElementById('conj-submit').addEventListener('click', checkConjAnswer);
 document.getElementById('conj-input').addEventListener('keydown', e => { if (e.key === 'Enter') checkConjAnswer(); });
 document.getElementById('conj-next').addEventListener('click', newConjQuestion);
+
+document.getElementById('v-k').addEventListener('input', updateVocabPreview);
+
+if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 
 ['a-dict-h','a-dict-k'].forEach(id => document.getElementById(id).addEventListener('input', updatePreview));
 document.getElementById('a-group').addEventListener('change', updatePreview);
