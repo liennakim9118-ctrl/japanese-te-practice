@@ -421,13 +421,13 @@ ruby rt {
 
   <!-- Mode tabs -->
   <div class="mode-tabs">
-    <button class="mode-tab active" id="tab-te" onclick="setMode('te')">て형</button>
-    <button class="mode-tab" id="tab-memo" onclick="setMode('memo')">암기</button>
+    <button class="mode-tab active" id="tab-memo" onclick="setMode('memo')">암기</button>
     <button class="mode-tab" id="tab-conj" onclick="setMode('conj')">활용</button>
+    <button class="mode-tab" id="tab-te" onclick="setMode('te')">て형</button>
   </div>
 
   <!-- ===== て형 연습 뷰 ===== -->
-  <div id="te-view">
+  <div id="te-view" style="display:none">
 
   <!-- Review mode banner -->
   <div class="review-banner" id="review-banner">
@@ -467,7 +467,7 @@ ruby rt {
   </div><!-- /te-view -->
 
   <!-- ===== 암기 연습 뷰 ===== -->
-  <div id="memo-view" style="display:none">
+  <div id="memo-view">
 
     <!-- Memo review banner -->
     <div class="review-banner" id="memo-review-banner">
@@ -581,7 +581,7 @@ ruby rt {
 <!-- ───── Vocab Manage Modal (표현) ───── -->
 <div class="modal-overlay" id="modal-vocab">
   <div class="modal">
-    <h2>＋ 내 표현 관리</h2>
+    <h2>＋ 암기 항목 관리</h2>
 
     <div class="section-title">새 표현 추가</div>
     <div class="form-group">
@@ -607,7 +607,10 @@ ruby rt {
     </div>
     <button class="btn-confirm" style="width:100%" onclick="confirmAddVocab()">＋ 추가</button>
 
-    <div class="section-title">내 표현 목록</div>
+    <div class="section-title">암기 항목 (동사 + 표현)</div>
+    <div class="form-group" style="margin-bottom:8px">
+      <input id="vocab-search" placeholder="🔍 검색 (표기·읽기·뜻)" style="font-family:inherit">
+    </div>
     <div id="vocab-list"></div>
 
     <div class="modal-btns">
@@ -882,7 +885,7 @@ let cur = {};
 // ═══════════════════════════════════════════════════
 // MEMO(암기) 상태
 // ═══════════════════════════════════════════════════
-let appMode = 'te';   // 'te' | 'memo'
+let appMode = 'memo';   // 'te' | 'memo' | 'conj' (기본 탭 = 암기)
 
 // 암기 일일 통계 (KST 00시 리셋, 별도 저장)
 let memoStats = { date: kstDateStr(), total:0, correct:0, streak:0, wrongMap:{} };
@@ -964,8 +967,11 @@ function drawVerb(mode) { return drawFromBag(mode, quizVerbs()); }
 let vocab = [];
 try { vocab = JSON.parse(localStorage.getItem('jp_vocab') || '[]'); } catch(e) {}
 function saveVocab() { localStorage.setItem('jp_vocab', JSON.stringify(vocab)); }
-// 암기 출제 풀 = 켜둔 동사 + 표현
-function memoItems() { return [...quizVerbs(), ...vocab]; }
+// 암기 전용 출제 제외(off) 집합 (te/conj의 disabledVerbs와 완전 별개)
+let memoOff = new Set();
+try { memoOff = new Set(JSON.parse(localStorage.getItem('jp_memo_off') || '[]')); } catch(e) {}
+// 암기 출제 풀 = 모든 동사 + 표현 중 memoOff 제외
+function memoItems() { return [...allVerbs(), ...vocab].filter(it => !memoOff.has(vkey(it))); }
 
 // ═══════════════════════════════════════════════════
 // QUESTION
@@ -1376,7 +1382,7 @@ function confirmAddVocab() {
   const k = g('v-k'), meaning = g('v-meaning');
   if (!k || !meaning) { alert('표기(일본어)와 뜻은 필수입니다.'); return; }
   const h = g('v-h') || k;   // 읽기 비우면 표기 그대로
-  if (memoItems().some(it => it.dict.k === k)) { alert(`'${k}' 는 이미 목록(동사/표현)에 있어요.`); return; }
+  if ([...allVerbs(), ...vocab].some(it => it.dict.k === k)) { alert(`'${k}' 는 이미 목록(동사/표현)에 있어요.`); return; }
   vocab.push({ dict:{k,h}, meaning, exJp:g('v-ex-jp'), exKo:g('v-ex-ko'), custom:true, isVocab:true });
   saveVocab();
   ['v-k','v-h','v-meaning','v-ex-jp','v-ex-ko'].forEach(id => { document.getElementById(id).value = ''; });
@@ -1384,26 +1390,55 @@ function confirmAddVocab() {
   renderVocabList();
   alert(`"${k}" 표현 추가 완료!`);
 }
-function renderVocabList() {
-  const list = document.getElementById('vocab-list');
-  if (!vocab.length) {
-    list.innerHTML = '<div class="empty-msg">아직 추가한 표현이 없어요.<br>위에서 표기·뜻을 넣으면 암기에 함께 출제됩니다.</div>';
-    return;
-  }
-  list.innerHTML = vocab.map((v, i) => {
-    const s = verbStats[v.dict.k] || { total:0, correct:0, wrong:0 };
-    return `<div class="review-row"><div style="flex:1">
-      <div class="rv-main">${ruby(v.dict.k, v.dict.h)} <span style="color:#888;font-weight:400">${v.meaning}</span></div>
-      <div class="rv-sub">${v.exJp ? '📝 예문 있음 · ' : ''}푼 <b>${s.total}</b> · 맞춤 <b style="color:#2e7d32">${s.correct}</b> · 틀림 <b style="color:#e53935">${s.wrong}</b></div>
-    </div><button class="rv-del" onclick="deleteVocab(${i})" title="삭제">🗑️</button></div>`;
-  }).join('');
+// 암기 항목 = 모든 동사 + 표현 (관리·검색용)
+function memoListRows() {
+  return [
+    ...BASE_VERBS.map(v => ({ v, kind:'동사', del:null })),
+    ...customVerbs.map(v => ({ v, kind:'동사', del:'verb' })),
+    ...vocab.map(v => ({ v, kind:'표현', del:'vocab' })),
+  ];
 }
-function deleteVocab(i) {
-  const v = vocab[i];
-  if (!v) return;
-  if (!confirm(`"${v.dict.k}" 표현을 삭제할까요?`)) return;
-  vocab.splice(i, 1);
-  saveVocab();
+function renderVocabList() {
+  const q = document.getElementById('vocab-search').value.trim();
+  let rows = memoListRows();
+  if (q) rows = rows.filter(o => (o.v.dict.k + ' ' + o.v.dict.h + ' ' + o.v.meaning).includes(q));
+  const list = document.getElementById('vocab-list');
+  if (!rows.length) { list.innerHTML = '<div class="empty-msg">검색 결과가 없어요.</div>'; return; }
+  list.innerHTML = `<div style="font-size:11px;color:#999;margin-bottom:6px">총 ${rows.length}개 · 체크 끄면 암기 출제 제외</div>` +
+    rows.map(o => {
+      const v = o.v, on = !memoOff.has(vkey(v));
+      const s = verbStats[vkey(v)] || { total:0, correct:0, wrong:0 };
+      const tag = `<span style="font-size:10px;color:#3b5bdb;font-weight:700">${o.kind}${o.del ? '·내' : ''}</span>`;
+      const del = o.del ? `<button class="rv-del" onclick="deleteMemoItem('${o.del}','${vkey(v)}')" title="삭제">🗑️</button>` : '';
+      return `<div class="review-row${on ? '' : ' off'}">
+        <label class="vrow-check"><input type="checkbox" ${on ? 'checked' : ''} onchange="toggleMemoOff('${vkey(v)}')"></label>
+        <div style="flex:1">
+          <div class="rv-main">${ruby(v.dict.k, v.dict.h)} <span style="color:#888;font-weight:400">${v.meaning}</span> ${tag}</div>
+          <div class="rv-sub">${v.exJp ? '📝 · ' : ''}푼 <b>${s.total}</b> · 맞춤 <b style="color:#2e7d32">${s.correct}</b> · 틀림 <b style="color:#e53935">${s.wrong}</b></div>
+        </div>${del}
+      </div>`;
+    }).join('');
+}
+function toggleMemoOff(k) {
+  memoOff.has(k) ? memoOff.delete(k) : memoOff.add(k);
+  localStorage.setItem('jp_memo_off', JSON.stringify([...memoOff]));
+  vocabDirty = true;
+  renderVocabList();
+}
+function deleteMemoItem(kind, key) {
+  if (kind === 'verb') {
+    const i = customVerbs.findIndex(v => vkey(v) === key);
+    if (i < 0) return;
+    if (!confirm(`"${customVerbs[i].dict.k}" 동사를 삭제할까요? (모든 모드에서 제거됩니다)`)) return;
+    customVerbs.splice(i, 1);
+    localStorage.setItem('jp_custom_verbs', JSON.stringify(customVerbs));
+  } else {
+    const i = vocab.findIndex(v => vkey(v) === key);
+    if (i < 0) return;
+    if (!confirm(`"${vocab[i].dict.k}" 표현을 삭제할까요?`)) return;
+    vocab.splice(i, 1);
+    saveVocab();
+  }
   vocabDirty = true;
   renderVocabList();
 }
@@ -2052,6 +2087,7 @@ document.getElementById('conj-input').addEventListener('keydown', e => { if (e.k
 document.getElementById('conj-next').addEventListener('click', newConjQuestion);
 
 document.getElementById('v-k').addEventListener('input', updateVocabPreview);
+document.getElementById('vocab-search').addEventListener('input', renderVocabList);
 
 if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 
@@ -2060,7 +2096,8 @@ document.getElementById('a-group').addEventListener('change', updatePreview);
 
 updateScoreDisplay();
 updateReviewBadge();
-newQuestion();
+document.getElementById('add-btn').textContent = '＋ 표현';   // 기본 탭 = 암기
+newMemoQuestion();
 </script>
 </body>
 </html>
