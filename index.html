@@ -2150,7 +2150,14 @@ document.getElementById('v-h').addEventListener('input', () => { vAutoH = false;
 document.getElementById('v-meaning').addEventListener('input', () => { vAutoM = false; });
 document.getElementById('vocab-search').addEventListener('input', renderVocabList);
 
-if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+if ('serviceWorker' in navigator) window.addEventListener('load', () => {
+  navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  // 이미 SW 제어 중(재방문)이면, 새 버전이 활성화될 때 자동 새로고침
+  if (navigator.serviceWorker.controller) {
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (refreshing) return; refreshing = true; location.reload(); });
+  }
+});
 
 ['a-dict-h','a-dict-k'].forEach(id => document.getElementById(id).addEventListener('input', updatePreview));
 document.getElementById('a-group').addEventListener('change', updatePreview);
