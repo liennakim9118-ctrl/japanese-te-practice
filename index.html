@@ -937,12 +937,15 @@ function ruby(k, h) {
 
 function allVerbs() { return [...BASE_VERBS, ...customVerbs]; }
 
-// 출제 제외(off)된 동사: dict.h 집합. 기본은 모두 출제(on)
+const vkey = v => v.dict.k;   // 동사 식별 키 = 한자형(동음이의 구분). 한자 없으면 k===h
+// 활용/て형 연습 제외(off) 동사 집합 (동사만 해당)
 let disabledVerbs = new Set();
 try { disabledVerbs = new Set(JSON.parse(localStorage.getItem('jp_disabled_verbs') || '[]')); } catch(e) {}
-const vkey = v => v.dict.k;   // 동사 식별 키 = 한자형(동음이의 구분). 한자 없으면 k===h
-const isVerbEnabled = v => !disabledVerbs.has(vkey(v));
-function quizVerbs() { return allVerbs().filter(isVerbEnabled); }
+// 숨김: 모든 연습(암기·활용·て형)에서 완전 제외. 기본/커스텀/표현 공통
+let hidden = new Set();
+try { hidden = new Set(JSON.parse(localStorage.getItem('jp_hidden') || '[]')); } catch(e) {}
+// te/conj 출제 = 숨김 아니고 활용 포함(disabledVerbs 아님)
+function quizVerbs() { return allVerbs().filter(v => !hidden.has(vkey(v)) && !disabledVerbs.has(vkey(v))); }
 let verbSetDirty = false;   // 출제 동사 변경 시 모달 닫을 때 새 문제 생성
 
 // ── 셔플백: 전체를 한 바퀴 다 낸 뒤 재섞기 (중복 체감 감소) ──
@@ -968,10 +971,8 @@ let vocab = [];
 try { vocab = JSON.parse(localStorage.getItem('jp_vocab') || '[]'); } catch(e) {}
 function saveVocab() { localStorage.setItem('jp_vocab', JSON.stringify(vocab)); }
 // 암기 전용 출제 제외(off) 집합 (te/conj의 disabledVerbs와 완전 별개)
-let memoOff = new Set();
-try { memoOff = new Set(JSON.parse(localStorage.getItem('jp_memo_off') || '[]')); } catch(e) {}
-// 암기 출제 풀 = 모든 동사 + 표현 중 memoOff 제외
-function memoItems() { return [...allVerbs(), ...vocab].filter(it => !memoOff.has(vkey(it))); }
+// 암기 출제 풀 = 숨김 아닌 모든 동사 + 표현 (중심 데이터)
+function memoItems() { return [...allVerbs(), ...vocab].filter(it => !hidden.has(vkey(it))); }
 
 // ═══════════════════════════════════════════════════
 // QUESTION
@@ -1311,14 +1312,14 @@ function renderVerbList() {
   const all = [
     ...BASE_VERBS.map(v => ({ v, custom:false, ci:-1 })),
     ...customVerbs.map((v, ci) => ({ v, custom:true, ci })),
-  ];
+  ].filter(o => !hidden.has(vkey(o.v)));   // 숨긴 동사는 제외
   const rows = all.map(o => {
     const s = verbStats[vkey(o.v)] || { total:0, correct:0, wrong:0 };
     return { ...o, total:s.total, correct:s.correct, wrong:s.wrong };
   }).sort((a, b) => (b.wrong - a.wrong) || (b.total - a.total));
 
   list.innerHTML = rows.map(r => {
-    const on = isVerbEnabled(r.v);
+    const on = !disabledVerbs.has(vkey(r.v));
     return `
     <div class="review-row${on ? '' : ' off'}">
       <label class="vrow-check"><input type="checkbox" ${on ? 'checked' : ''} onchange="toggleVerbEnabled('${vkey(r.v)}')"></label>
@@ -1398,31 +1399,50 @@ function memoListRows() {
     ...vocab.map(v => ({ v, kind:'표현', del:'vocab' })),
   ];
 }
+function memoRowHtml(o, isHidden) {
+  const v = o.v, isVerb = o.kind === '동사';
+  const s = verbStats[vkey(v)] || { total:0, correct:0, wrong:0 };
+  const tag = `<span style="font-size:10px;color:#3b5bdb;font-weight:700">${o.kind}${o.del ? '·내' : ''}</span>`;
+  // 동사만 '활용 포함' 체크 (숨김 목록에선 표시 안 함)
+  const conjChk = (isVerb && !isHidden)
+    ? `<label class="vrow-check" title="동사 활용·て형 연습에 포함"><input type="checkbox" ${!disabledVerbs.has(vkey(v)) ? 'checked' : ''} onchange="toggleConjInclude('${vkey(v)}')"></label>`
+    : `<span style="width:20px;flex-shrink:0"></span>`;
+  const hideBtn = isHidden
+    ? `<button class="rv-del" style="color:#3b5bdb" onclick="toggleHidden('${vkey(v)}')" title="복원">↩︎</button>`
+    : `<button class="rv-del" onclick="toggleHidden('${vkey(v)}')" title="숨김">🙈</button>`;
+  const del = o.del ? `<button class="rv-del" onclick="deleteMemoItem('${o.del}','${vkey(v)}')" title="삭제">🗑️</button>` : '';
+  return `<div class="review-row">
+    ${conjChk}
+    <div style="flex:1">
+      <div class="rv-main">${ruby(v.dict.k, v.dict.h)} <span style="color:#888;font-weight:400">${v.meaning}</span> ${tag}</div>
+      <div class="rv-sub">${v.exJp ? '📝 · ' : ''}푼 <b>${s.total}</b> · 맞춤 <b style="color:#2e7d32">${s.correct}</b> · 틀림 <b style="color:#e53935">${s.wrong}</b></div>
+    </div>${hideBtn}${del}
+  </div>`;
+}
 function renderVocabList() {
   const q = document.getElementById('vocab-search').value.trim();
   let rows = memoListRows();
   if (q) rows = rows.filter(o => (o.v.dict.k + ' ' + o.v.dict.h + ' ' + o.v.meaning).includes(q));
+  const vis = rows.filter(o => !hidden.has(vkey(o.v)));
+  const hid = rows.filter(o => hidden.has(vkey(o.v)));
   const list = document.getElementById('vocab-list');
-  if (!rows.length) { list.innerHTML = '<div class="empty-msg">검색 결과가 없어요.</div>'; return; }
-  list.innerHTML = `<div style="font-size:11px;color:#999;margin-bottom:6px">총 ${rows.length}개 · 체크 끄면 암기 출제 제외</div>` +
-    rows.map(o => {
-      const v = o.v, on = !memoOff.has(vkey(v));
-      const s = verbStats[vkey(v)] || { total:0, correct:0, wrong:0 };
-      const tag = `<span style="font-size:10px;color:#3b5bdb;font-weight:700">${o.kind}${o.del ? '·내' : ''}</span>`;
-      const del = o.del ? `<button class="rv-del" onclick="deleteMemoItem('${o.del}','${vkey(v)}')" title="삭제">🗑️</button>` : '';
-      return `<div class="review-row${on ? '' : ' off'}">
-        <label class="vrow-check"><input type="checkbox" ${on ? 'checked' : ''} onchange="toggleMemoOff('${vkey(v)}')"></label>
-        <div style="flex:1">
-          <div class="rv-main">${ruby(v.dict.k, v.dict.h)} <span style="color:#888;font-weight:400">${v.meaning}</span> ${tag}</div>
-          <div class="rv-sub">${v.exJp ? '📝 · ' : ''}푼 <b>${s.total}</b> · 맞춤 <b style="color:#2e7d32">${s.correct}</b> · 틀림 <b style="color:#e53935">${s.wrong}</b></div>
-        </div>${del}
-      </div>`;
-    }).join('');
+  let html = `<div style="font-size:11px;color:#999;margin-bottom:6px">암기 출제 ${vis.length}개 · 왼쪽 ☑︎=활용/て형 연습 포함(동사) · 🙈=숨김</div>`;
+  html += vis.length ? vis.map(o => memoRowHtml(o, false)).join('') : '<div class="empty-msg">항목이 없어요.</div>';
+  if (hid.length) html += `<div class="section-title" style="margin-top:16px">🙈 숨김 목록 (${hid.length})</div>` + hid.map(o => memoRowHtml(o, true)).join('');
+  list.innerHTML = html;
 }
-function toggleMemoOff(k) {
-  memoOff.has(k) ? memoOff.delete(k) : memoOff.add(k);
-  localStorage.setItem('jp_memo_off', JSON.stringify([...memoOff]));
-  vocabDirty = true;
+// 동사 활용/て형 연습 포함 토글 (disabledVerbs)
+function toggleConjInclude(key) {
+  disabledVerbs.has(key) ? disabledVerbs.delete(key) : disabledVerbs.add(key);
+  localStorage.setItem('jp_disabled_verbs', JSON.stringify([...disabledVerbs]));
+  verbSetDirty = true; vocabDirty = true;
+  renderVocabList();
+}
+// 숨김 토글 (모든 연습에서 제외)
+function toggleHidden(key) {
+  hidden.has(key) ? hidden.delete(key) : hidden.add(key);
+  localStorage.setItem('jp_hidden', JSON.stringify([...hidden]));
+  verbSetDirty = true; vocabDirty = true;
   renderVocabList();
 }
 function deleteMemoItem(kind, key) {
