@@ -716,7 +716,7 @@ let verbStats = {};
 try { verbStats = JSON.parse(localStorage.getItem('jp_verb_stats') || '{}'); } catch(e) {}
 function saveVerbStats() { localStorage.setItem('jp_verb_stats', JSON.stringify(verbStats)); }
 function bumpVerbStat(verb, ok) {
-  const h = verb.dict.h;
+  const h = vkey(verb);
   if (!verbStats[h]) verbStats[h] = { k: verb.dict.k, total:0, correct:0, wrong:0 };
   verbStats[h].k = verb.dict.k;
   verbStats[h].total++;
@@ -728,7 +728,7 @@ function bumpVerbStat(verb, ok) {
 let review = {};
 try { review = JSON.parse(localStorage.getItem('jp_review') || '{}'); } catch(e) {}
 function saveReview() { localStorage.setItem('jp_review', JSON.stringify(review)); }
-const rkey = (verb, target) => verb.dict.h + '|' + target.id;
+const rkey = (verb, target) => verb.dict.k + '|' + target.id;
 
 let reviewMode = false;
 let reviewQueue = [];
@@ -774,7 +774,8 @@ function allVerbs() { return [...BASE_VERBS, ...customVerbs]; }
 // 출제 제외(off)된 동사: dict.h 집합. 기본은 모두 출제(on)
 let disabledVerbs = new Set();
 try { disabledVerbs = new Set(JSON.parse(localStorage.getItem('jp_disabled_verbs') || '[]')); } catch(e) {}
-const isVerbEnabled = v => !disabledVerbs.has(v.dict.h);
+const vkey = v => v.dict.k;   // 동사 식별 키 = 한자형(동음이의 구분). 한자 없으면 k===h
+const isVerbEnabled = v => !disabledVerbs.has(vkey(v));
 function quizVerbs() { return allVerbs().filter(isVerbEnabled); }
 let verbSetDirty = false;   // 출제 동사 변경 시 모달 닫을 때 새 문제 생성
 
@@ -785,14 +786,14 @@ function drawVerb(mode) {
   const verbs = quizVerbs();
   if (!verbs.length) return null;
   const bag = bags[mode];
-  const sig = verbs.map(v => v.dict.h).join('|');   // 출제 동사 구성이 바뀌면 백 재생성
+  const sig = verbs.map(v => vkey(v)).join('|');   // 출제 동사 구성이 바뀌면 백 재생성
   if (bag.sig !== sig || bag.items.length === 0) {
     bag.sig = sig;
     bag.items = shuffle(verbs.slice());
-    if (verbs.length > 1 && bag.last && bag.items[0].dict.h === bag.last) bag.items.push(bag.items.shift()); // 직전과 연속 방지
+    if (verbs.length > 1 && bag.last && vkey(bag.items[0]) === bag.last) bag.items.push(bag.items.shift()); // 직전과 연속 방지
   }
   const v = bag.items.shift();
-  bag.last = v.dict.h;
+  bag.last = vkey(v);
   return v;
 }
 
@@ -902,8 +903,8 @@ function checkAnswer() {
       `</div>`;
   } else {
     stats.streak = 0;
-    stats.wrongMap[verb.dict.h] = (stats.wrongMap[verb.dict.h] || { k: verb.dict.k, cnt:0 });
-    stats.wrongMap[verb.dict.h].cnt++;
+    stats.wrongMap[vkey(verb)] = (stats.wrongMap[vkey(verb)] || { k: verb.dict.k, h: verb.dict.h, cnt:0 });
+    stats.wrongMap[vkey(verb)].cnt++;
     addWrong(verb, target);
     inp.className = 'answer-input wrong';
     rc.className = 'result-card wrong';
@@ -1090,7 +1091,7 @@ function updatePreview() {
       (sug ? `<br><span style="color:#3b5bdb">혹시 <b>${VERB_DICT[sug].k}</b>(${VERB_DICT[sug].m})? 끝에 <b>する</b>를 붙여보세요.</span>` : '');
     return;
   }
-  const dup = allVerbs().some(v => v.dict.h === c.dict.h);
+  const dup = allVerbs().some(v => v.dict.k === c.dict.k);
   const okuBad = c.dict.k.slice(-1) !== c.dict.h.slice(-1);   // 한자·히라가나 끝 글자 불일치
   let head;
   if (okuBad)                 head = `<span style="color:#e53935;font-weight:700">⚠️ 한자·히라가나 불일치</span> ${ruby(c.dict.k, c.dict.h)} — 끝 글자가 달라요 (예: 渡す→わたす)`;
@@ -1111,7 +1112,7 @@ function confirmAddVerb() {
   }
   if (!meaning) { alert('의미를 입력해 주세요.'); return; }
   // 중복 동사 차단 (기본+커스텀 통틀어 같은 기본형이 있으면 거부)
-  if (allVerbs().some(v => v.dict.h === c.dict.h)) {
+  if (allVerbs().some(v => v.dict.k === c.dict.k)) {
     alert(`'${c.dict.k}' (${c.dict.h}) 는 이미 목록에 있는 동사예요.\n중복으로 추가할 수 없습니다.`);
     return;
   }
@@ -1136,7 +1137,7 @@ function renderVerbList() {
     ...customVerbs.map((v, ci) => ({ v, custom:true, ci })),
   ];
   const rows = all.map(o => {
-    const s = verbStats[o.v.dict.h] || { total:0, correct:0, wrong:0 };
+    const s = verbStats[vkey(o.v)] || { total:0, correct:0, wrong:0 };
     return { ...o, total:s.total, correct:s.correct, wrong:s.wrong };
   }).sort((a, b) => (b.wrong - a.wrong) || (b.total - a.total));
 
@@ -1144,7 +1145,7 @@ function renderVerbList() {
     const on = isVerbEnabled(r.v);
     return `
     <div class="review-row${on ? '' : ' off'}">
-      <label class="vrow-check"><input type="checkbox" ${on ? 'checked' : ''} onchange="toggleVerbEnabled('${r.v.dict.h}')"></label>
+      <label class="vrow-check"><input type="checkbox" ${on ? 'checked' : ''} onchange="toggleVerbEnabled('${vkey(r.v)}')"></label>
       <div style="flex:1">
         <div class="rv-main">${ruby(r.v.dict.k, r.v.dict.h)} <span style="color:#888;font-weight:400">${r.v.meaning}</span>${r.custom ? ' <span style="color:#3b5bdb;font-size:11px;font-weight:700">내 동사</span>' : ''}</div>
         <div class="rv-sub">푼 <b>${r.total}</b> · 맞춤 <b style="color:#2e7d32">${r.correct}</b> · 틀림 <b style="color:#e53935">${r.wrong}</b></div>
@@ -1187,7 +1188,7 @@ function openStats() {
   document.getElementById('st-streak').textContent  = s.streak;
 
   const wrongs = Object.entries(s.wrongMap)
-    .map(([h,v]) => ({ h, k:v.k, cnt:v.cnt }))
+    .map(([key,v]) => ({ h: v.h || key, k: v.k, cnt: v.cnt }))
     .sort((a,b) => b.cnt - a.cnt).slice(0,5);
 
   const modeLabel = appMode === 'memo' ? '암기' : 'て형';
@@ -1500,8 +1501,8 @@ function checkMemoAnswer() {
     document.getElementById('memo-result-body').innerHTML = `<div class="correct-answer">${answerHtml}</div>`;
   } else {
     memoStats.streak=0;
-    memoStats.wrongMap[verb.dict.h] = (memoStats.wrongMap[verb.dict.h] || { k:verb.dict.k, cnt:0 });
-    memoStats.wrongMap[verb.dict.h].cnt++;
+    memoStats.wrongMap[vkey(verb)] = (memoStats.wrongMap[vkey(verb)] || { k:verb.dict.k, h:verb.dict.h, cnt:0 });
+    memoStats.wrongMap[vkey(verb)].cnt++;
     addMemoWrong(verb);
     inp.className='answer-input wrong';
     rc.className='result-card wrong';
@@ -1521,13 +1522,13 @@ function memoSelfCorrect() {
   const verb = memoCur.verb;
   if (!verb) return;
   memoStats.correct++; memoStats.streak++;
-  const wm = memoStats.wrongMap[verb.dict.h];
-  if (wm) { wm.cnt--; if (wm.cnt <= 0) delete memoStats.wrongMap[verb.dict.h]; }
+  const wm = memoStats.wrongMap[vkey(verb)];
+  if (wm) { wm.cnt--; if (wm.cnt <= 0) delete memoStats.wrongMap[vkey(verb)]; }
   saveMemoStats();
-  const vs = verbStats[verb.dict.h];
+  const vs = verbStats[vkey(verb)];
   if (vs) { vs.wrong = Math.max(0, vs.wrong - 1); vs.correct++; saveVerbStats(); }
-  const it = memoReview[verb.dict.h];
-  if (it) { it.w = Math.max(0, it.w - 1); if (it.w === 0 && !it.m) delete memoReview[verb.dict.h]; saveMemoReview(); }
+  const it = memoReview[vkey(verb)];
+  if (it) { it.w = Math.max(0, it.w - 1); if (it.w === 0 && !it.m) delete memoReview[vkey(verb)]; saveMemoReview(); }
   if (memoReviewMode) handleMemoReviewCorrect();
   const rc = document.getElementById('memo-result');
   rc.className='result-card correct';
@@ -1545,26 +1546,26 @@ function memoSelfCorrect() {
 function updateMemoBookmarkBtn() {
   const btn = document.getElementById('memo-bookmark-btn');
   if (!memoCur.verb) { btn.textContent='🔖'; btn.style.opacity=0.55; return; }
-  const it = memoReview[memoCur.verb.dict.h];
+  const it = memoReview[vkey(memoCur.verb)];
   const marked = !!(it && it.m);
   btn.textContent = marked ? '⭐' : '🔖';
   btn.style.opacity = marked ? 1 : 0.55;
 }
 function addMemoWrong(verb) {
-  const h = verb.dict.h;
+  const h = vkey(verb);
   if (!memoReview[h]) memoReview[h] = { v:verb, w:0, m:false };
   memoReview[h].w++;
   saveMemoReview(); updateReviewBadge();
 }
 function toggleMemoBookmark() {
   if (!memoCur.verb) return;
-  const h = memoCur.verb.dict.h;
+  const h = vkey(memoCur.verb);
   if (memoReview[h]) { memoReview[h].m = !memoReview[h].m; if (!memoReview[h].m && memoReview[h].w === 0) delete memoReview[h]; }
   else memoReview[h] = { v:memoCur.verb, w:0, m:true };
   saveMemoReview(); updateMemoBookmarkBtn(); updateReviewBadge();
 }
 function handleMemoReviewCorrect() {
-  const h = memoCur.verb.dict.h;
+  const h = vkey(memoCur.verb);
   const it = memoReview[h];
   if (it && !it.m) { delete memoReview[h]; saveMemoReview(); memoReviewQueue = memoReviewQueue.filter(x => x !== h); }
   updateReviewBadge();
