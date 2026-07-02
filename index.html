@@ -1413,14 +1413,36 @@ function memoRowHtml(o, isHidden) {
   const hideBtn = isHidden
     ? `<button class="rv-del" style="color:#3b5bdb" onclick="toggleHidden('${vkey(v)}')" title="복원">↩︎</button>`
     : `<button class="rv-del" onclick="toggleHidden('${vkey(v)}')" title="숨김">🙈</button>`;
+  // 표현을 동사로 전환(활용/て형 연습 가능하게)
+  const toVerb = (o.kind === '표현' && !isHidden)
+    ? `<button class="rv-del" style="color:#3b5bdb;font-size:12px" onclick="convertVocabToVerb('${vkey(v)}')" title="동사로 전환(활용 연습 가능)">→동사</button>` : '';
   const del = o.del ? `<button class="rv-del" onclick="deleteMemoItem('${o.del}','${vkey(v)}')" title="삭제">🗑️</button>` : '';
   return `<div class="review-row">
     ${conjChk}
     <div style="flex:1">
       <div class="rv-main">${ruby(v.dict.k, v.dict.h)} <span style="color:#888;font-weight:400">${v.meaning}</span> ${tag}</div>
       <div class="rv-sub">${v.exJp ? '📝 · ' : ''}푼 <b>${s.total}</b> · 맞춤 <b style="color:#2e7d32">${s.correct}</b> · 틀림 <b style="color:#e53935">${s.wrong}</b></div>
-    </div>${hideBtn}${del}
+    </div>${toVerb}${hideBtn}${del}
   </div>`;
+}
+// 표현 → 동사 전환 (활용형 자동 생성)
+function convertVocabToVerb(key) {
+  const i = vocab.findIndex(v => vkey(v) === key);
+  if (i < 0) return;
+  const v = vocab[i];
+  const c = conjugate(v.dict.h, v.dict.k, 'auto');
+  if (!c || c.dict.k.slice(-1) !== c.dict.h.slice(-1)) {
+    alert('이 표현은 동사 기본형(사전형)이 아니라 활용을 만들 수 없어요.\n동사로 쓰려면 사전형이어야 해요. (예: はしる / 走る)');
+    return;
+  }
+  if (allVerbs().some(x => x.dict.k === c.dict.k)) { alert('이미 동사 목록에 있어요.'); return; }
+  if (!confirm(`'${c.dict.k}'을(를) 동사로 전환할까요?\n(${GROUP_NAME[c.group]} · て형 ${c.te.h} · 활용/て형 연습에 사용 가능)\n※ 그룹이 틀리면 전환 후 다시 확인해 주세요.`)) return;
+  customVerbs.push({ dict:c.dict, masu:c.masu, nai:c.nai, ta:c.ta, te:c.te, meaning:v.meaning, group:c.group, custom:true, ...(v.exJp && { exJp:v.exJp }), ...(v.exKo && { exKo:v.exKo }) });
+  localStorage.setItem('jp_custom_verbs', JSON.stringify(customVerbs));
+  vocab.splice(i, 1); saveVocab();
+  vocabDirty = true; verbSetDirty = true;
+  renderVocabList();
+  alert(`"${c.dict.k}" 동사로 전환 완료! 활용 체크박스가 생겼어요.`);
 }
 function renderVocabList() {
   const q = document.getElementById('vocab-search').value.trim();
