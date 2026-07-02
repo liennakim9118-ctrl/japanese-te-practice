@@ -420,8 +420,9 @@ ruby rt {
 
   <!-- Mode tabs -->
   <div class="mode-tabs">
-    <button class="mode-tab active" id="tab-te" onclick="setMode('te')">て형 연습</button>
-    <button class="mode-tab" id="tab-memo" onclick="setMode('memo')">암기 연습</button>
+    <button class="mode-tab active" id="tab-te" onclick="setMode('te')">て형</button>
+    <button class="mode-tab" id="tab-memo" onclick="setMode('memo')">암기</button>
+    <button class="mode-tab" id="tab-conj" onclick="setMode('conj')">활용</button>
   </div>
 
   <!-- ===== て형 연습 뷰 ===== -->
@@ -496,6 +497,37 @@ ruby rt {
 
   </div><!-- /memo-view -->
 
+  <!-- ===== 활용 연습 뷰 ===== -->
+  <div id="conj-view" style="display:none">
+
+    <div class="review-banner" id="conj-review-banner">
+      <span id="conj-review-banner-text">🧩 활용 복습 모드</span>
+      <button onclick="exitConjReview(false)">복습 종료</button>
+    </div>
+
+    <div class="card" id="conj-card">
+      <div class="card-top">
+        <span class="form-badge" id="conj-form-label">활용 만들기</span>
+        <button class="bookmark-btn" id="conj-bookmark-btn" onclick="toggleConjBookmark()" title="활용 복습에 저장">🔖</button>
+      </div>
+      <div class="verb-display" id="conj-display"></div>
+      <div class="question-text" id="conj-question"></div>
+      <div class="input-row">
+        <input type="text" class="answer-input" id="conj-input"
+          placeholder="ひらがな 또는 한자..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <button class="submit-btn" id="conj-submit">확인</button>
+      </div>
+    </div>
+
+    <div class="result-card" id="conj-result">
+      <div class="result-title" id="conj-result-title"></div>
+      <div id="conj-result-body"></div>
+    </div>
+
+    <button class="next-btn" id="conj-next" style="display:none">다음 문제 →</button>
+
+  </div><!-- /conj-view -->
+
   <!-- Bottom bar -->
   <div class="bottom-bar">
     <button class="icon-btn" onclick="openReviewByMode()">🔖 복습 <span class="review-badge" id="review-badge"></span></button>
@@ -563,6 +595,18 @@ ruby rt {
   </div>
 </div>
 
+<!-- ───── Conj Review Modal (활용) ───── -->
+<div class="modal-overlay" id="modal-conj-review">
+  <div class="modal">
+    <h2>🧩 활용 복습 목록</h2>
+    <div id="conj-review-list"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modal-conj-review')">닫기</button>
+      <button class="btn-confirm" id="start-conj-review-btn" onclick="startConjReview()">복습 시작</button>
+    </div>
+  </div>
+</div>
+
 <!-- ───── Settings Modal ───── -->
 <div class="modal-overlay" id="modal-settings">
   <div class="modal">
@@ -576,6 +620,8 @@ ruby rt {
       <input type="checkbox" id="memo-bidir-check">
       <span>한↔일 랜덤 출제 <span class="check-sub">(끄면 일→한만: 일본어 보고 뜻 맞히기)</span></span>
     </label>
+    <div class="section-title">활용 연습 (연습할 활용형)</div>
+    <div id="conj-checks"></div>
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeModal('modal-settings')">취소</button>
       <button class="btn-confirm" onclick="saveSettings()">저장 후 새 문제</button>
@@ -680,6 +726,57 @@ const GIVEN_FORMS = [
   { id:'deriv', label:'て파생형' },
 ];
 
+// 활용 연습(기본 활용) — 뜻 뉘앙스로 출제, 정답에서 활용형 이름 공개
+const CONJ_FORMS = [
+  { id:'masu', label:'정중형 (ます형)', nuance:'~합니다 (정중하게)' },
+  { id:'nai',  label:'부정형 (ない형)', nuance:'~하지 않는다' },
+  { id:'ta',   label:'과거형 (た형)',   nuance:'~했다' },
+  { id:'te',   label:'연결형 (て형)',   nuance:'~하고 / ~해서' },
+  { id:'pot',  label:'가능형',          nuance:'~할 수 있다' },
+  { id:'vol',  label:'의지형',          nuance:'~하자 / ~해야지' },
+  { id:'cond', label:'조건형 (~ば)',    nuance:'~하면' },
+  { id:'imp',  label:'명령형',          nuance:'~해라' },
+  { id:'proh', label:'금지형',          nuance:'~하지 마라' },
+];
+const E_ROW = {'う':'え','く':'け','ぐ':'げ','す':'せ','つ':'て','ぬ':'ね','ぶ':'べ','む':'め','る':'れ'};
+const O_ROW = {'う':'お','く':'こ','ぐ':'ご','す':'そ','つ':'と','ぬ':'の','ぶ':'ぼ','む':'も','る':'ろ'};
+
+// 동사(dict/masu/nai/ta/te/group 보유)에서 활용형 {k,h} 산출
+function conjForm(verb, id) {
+  if (id === 'masu') return verb.masu;
+  if (id === 'nai')  return verb.nai;
+  if (id === 'ta')   return verb.ta;
+  if (id === 'te')   return verb.te;
+  if (id === 'proh') return { k: verb.dict.k + 'な', h: verb.dict.h + 'な' };
+  const dk = verb.dict.k, dh = verb.dict.h, g = verb.group;
+  if (g === 3) {
+    if (dh.endsWith('する')) {
+      const bk = dk.slice(0,-2), bh = dh.slice(0,-2);
+      const s = { pot:'できる', imp:'しろ', cond:'すれば', vol:'しよう' }[id];
+      return { k: bk + s, h: bh + s };
+    } else { // くる / 来る (읽기 변화)
+      const kStem = dk.slice(0,-1);
+      const H = { pot:'こられる', imp:'こい', cond:'くれば', vol:'こよう' };
+      const K = { pot:kStem+'られる', imp:kStem+'い', cond:kStem+'れば', vol:kStem+'よう' };
+      return { k: (dk === dh ? H[id] : K[id]), h: H[id] };
+    }
+  }
+  if (g === 2) {
+    const ks = dk.slice(0,-1), hs = dh.slice(0,-1);
+    const s = { pot:'られる', imp:'ろ', cond:'れば', vol:'よう' }[id];
+    return { k: ks + s, h: hs + s };
+  }
+  // g === 1 (godan)
+  const last = dh.slice(-1), ks = dk.slice(0,-1), hs = dh.slice(0,-1);
+  let s;
+  if (id === 'pot')  s = E_ROW[last] + 'る';
+  else if (id === 'imp')  s = E_ROW[last];
+  else if (id === 'cond') s = E_ROW[last] + 'ば';
+  else if (id === 'vol')  s = O_ROW[last] + 'う';
+  return { k: ks + s, h: hs + s };
+}
+const conjLabel = id => { const f = CONJ_FORMS.find(x=>x.id===id); return f ? f.label : id; };
+
 // ═══════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════
@@ -758,6 +855,25 @@ try { memoBidir = JSON.parse(localStorage.getItem('jp_memo_bidir') || 'false'); 
 
 let memoCur = {};
 
+// ── 활용 연습 상태 ──
+let conjStats = { date: kstDateStr(), total:0, correct:0, streak:0, wrongMap:{} };
+try { const s = JSON.parse(localStorage.getItem('jp_conj_stats') || 'null'); if (s && s.date === kstDateStr()) conjStats = s; } catch(e) {}
+function saveConjStats() { localStorage.setItem('jp_conj_stats', JSON.stringify(conjStats)); }
+function rolloverConjStats() { if (conjStats.date !== kstDateStr()) { conjStats = { date: kstDateStr(), total:0, correct:0, streak:0, wrongMap:{} }; saveConjStats(); } }
+
+// 활용 복습(별도): { '飲む|pot': { v, fid, w, m } }
+let conjReview = {};
+try { conjReview = JSON.parse(localStorage.getItem('jp_conj_review') || '{}'); } catch(e) {}
+function saveConjReview() { localStorage.setItem('jp_conj_review', JSON.stringify(conjReview)); }
+let conjReviewMode = false, conjReviewQueue = [];
+const ckey = (verb, fid) => verb.dict.k + '|' + fid;
+
+// 연습할 활용형 설정 (기본: 전체)
+let conjSettings = CONJ_FORMS.map(f => f.id);
+try { const s = JSON.parse(localStorage.getItem('jp_conj_forms') || 'null'); if (s && s.length) conjSettings = s; } catch(e) {}
+
+let conjCur = {};
+
 // ═══════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════
@@ -780,7 +896,7 @@ function quizVerbs() { return allVerbs().filter(isVerbEnabled); }
 let verbSetDirty = false;   // 출제 동사 변경 시 모달 닫을 때 새 문제 생성
 
 // ── 셔플백: 전체를 한 바퀴 다 낸 뒤 재섞기 (중복 체감 감소) ──
-const bags = { te: { sig:'', items:[], last:null }, memo: { sig:'', items:[], last:null } };
+const bags = { te: { sig:'', items:[], last:null }, memo: { sig:'', items:[], last:null }, conj: { sig:'', items:[], last:null } };
 function shuffle(a) { for (let i=a.length-1; i>0; i--) { const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 function drawVerb(mode) {
   const verbs = quizVerbs();
@@ -1180,8 +1296,8 @@ function deleteCustomVerb(i) {
 
 // ── Stats (현재 모드 기준) ──
 function openStats() {
-  appMode === 'memo' ? rolloverMemoStats() : rolloverStats();
-  const s = appMode === 'memo' ? memoStats : stats;
+  appMode === 'memo' ? rolloverMemoStats() : appMode === 'conj' ? rolloverConjStats() : rolloverStats();
+  const s = activeStats();
   document.getElementById('st-total').textContent   = s.total;
   document.getElementById('st-correct').textContent = s.correct;
   document.getElementById('st-rate').textContent    = s.total ? Math.round(s.correct/s.total*100)+'%' : '0%';
@@ -1191,7 +1307,7 @@ function openStats() {
     .map(([key,v]) => ({ h: v.h || key, k: v.k, cnt: v.cnt }))
     .sort((a,b) => b.cnt - a.cnt).slice(0,5);
 
-  const modeLabel = appMode === 'memo' ? '암기' : 'て형';
+  const modeLabel = appMode === 'memo' ? '암기' : appMode === 'conj' ? '활용' : 'て형';
   document.getElementById('wrong-list').innerHTML = wrongs.length
     ? `<div style="font-size:12px;color:#888;margin-bottom:8px;font-weight:600">자주 틀리는 동사 TOP 5 (${modeLabel})</div>` +
       wrongs.map(w =>
@@ -1203,10 +1319,12 @@ function openStats() {
 }
 
 function resetStats() {
-  const modeLabel = appMode === 'memo' ? '암기' : 'て형';
+  const modeLabel = appMode === 'memo' ? '암기' : appMode === 'conj' ? '활용' : 'て형';
   if (!confirm(`오늘 ${modeLabel} 통계를 초기화하시겠습니까?`)) return;
   const fresh = { date: kstDateStr(), total:0, correct:0, streak:0, wrongMap:{} };
-  if (appMode === 'memo') { memoStats = fresh; saveMemoStats(); } else { stats = fresh; saveStats(); }
+  if (appMode === 'memo') { memoStats = fresh; saveMemoStats(); }
+  else if (appMode === 'conj') { conjStats = fresh; saveConjStats(); }
+  else { stats = fresh; saveStats(); }
   updateScoreDisplay();
   closeModal('modal-stats');
 }
@@ -1228,6 +1346,14 @@ function openSettings() {
   ).join('');
 
   document.getElementById('memo-bidir-check').checked = memoBidir;
+
+  document.getElementById('conj-checks').innerHTML = CONJ_FORMS.map(f =>
+    `<label class="check-label">
+      <input type="checkbox" value="${f.id}" ${conjSettings.includes(f.id)?'checked':''}>
+      <span><b>${f.label}</b> <span class="check-sub">${f.nuance}</span></span>
+    </label>`
+  ).join('');
+
   document.getElementById('modal-settings').classList.add('open');
 }
 
@@ -1240,8 +1366,14 @@ function saveSettings() {
   localStorage.setItem('jp_settings', JSON.stringify(settings));
   memoBidir = document.getElementById('memo-bidir-check').checked;
   localStorage.setItem('jp_memo_bidir', JSON.stringify(memoBidir));
+
+  const cc = [...document.querySelectorAll('#conj-checks input:checked')].map(c=>c.value);
+  if (!cc.length) { alert('활용 연습에서 연습할 활용형을 최소 1개 선택하세요.'); return; }
+  conjSettings = cc;
+  localStorage.setItem('jp_conj_forms', JSON.stringify(conjSettings));
+
   closeModal('modal-settings');
-  appMode === 'memo' ? newMemoQuestion() : newQuestion();
+  appMode === 'memo' ? newMemoQuestion() : appMode === 'conj' ? newConjQuestion() : newQuestion();
 }
 
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
@@ -1251,20 +1383,23 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 // ═══════════════════════════════════════════════════
 const targetLabel = tid => { const d = DERIVATIVES.find(x=>x.id===tid); return d ? d.label : tid; };
 
+function activeStats() { return appMode === 'memo' ? memoStats : appMode === 'conj' ? conjStats : stats; }
+function activeReview() { return appMode === 'memo' ? memoReview : appMode === 'conj' ? conjReview : review; }
+
 function updateReviewBadge() {
-  const n = (appMode === 'memo' ? Object.keys(memoReview) : Object.keys(review)).length;
+  const n = Object.keys(activeReview()).length;
   const b = document.getElementById('review-badge');
   if (b) b.textContent = n ? `(${n})` : '';
 }
 
 // 헤더 점수판 (현재 모드 기준)
 function updateScoreDisplay() {
-  const s = appMode === 'memo' ? memoStats : stats;
+  const s = activeStats();
   document.getElementById('score-display').textContent = `정답: ${s.correct} / ${s.total}`;
 }
 
 // 복습 버튼: 현재 모드에 맞는 복습 목록 열기
-function openReviewByMode() { appMode === 'memo' ? openMemoReview() : openReview(); }
+function openReviewByMode() { appMode === 'memo' ? openMemoReview() : appMode === 'conj' ? openConjReview() : openReview(); }
 
 function updateBookmarkBtn() {
   const btn = document.getElementById('bookmark-btn');
@@ -1402,14 +1537,15 @@ function exitReview(completed) {
 function setMode(m) {
   if (appMode === m) return;
   appMode = m;
-  document.getElementById('tab-te').classList.toggle('active', m === 'te');
-  document.getElementById('tab-memo').classList.toggle('active', m === 'memo');
-  document.getElementById('te-view').style.display   = (m === 'te')   ? '' : 'none';
-  document.getElementById('memo-view').style.display = (m === 'memo') ? '' : 'none';
+  ['te','memo','conj'].forEach(x => {
+    document.getElementById('tab-' + x).classList.toggle('active', m === x);
+    document.getElementById(x + '-view').style.display = (m === x) ? '' : 'none';
+  });
   updateReviewBadge();
   updateScoreDisplay();
-  if (m === 'memo') { if (!memoCur.verb) newMemoQuestion(); }
-  else              { if (!cur.verb)     newQuestion(); }
+  if (m === 'memo')      { if (!memoCur.verb) newMemoQuestion(); }
+  else if (m === 'conj') { if (!conjCur.verb) newConjQuestion(); }
+  else                   { if (!cur.verb)     newQuestion(); }
 }
 
 // 한글 뜻 느슨한 채점: 공백/괄호 제거 + 여러 뜻(/) 후보 + 어간 포함 허용
@@ -1615,6 +1751,163 @@ function exitMemoReview(completed) {
   newMemoQuestion();
 }
 
+// ═══════════════════════════════════════════════════
+// CONJ (활용 연습) — 뜻 뉘앙스 보고 활용형 만들기
+// ═══════════════════════════════════════════════════
+function newConjQuestion() {
+  rolloverConjStats();
+  if (conjReviewMode) { newConjReviewQuestion(); return; }
+  const verb = drawVerb('conj');
+  if (!verb) { conjEmpty(); return; }
+  const forms = CONJ_FORMS.filter(f => conjSettings.includes(f.id));
+  if (!forms.length) { conjEmpty('설정에서 연습할 활용형을 최소 1개 켜주세요.'); return; }
+  renderConj(verb, rand(forms).id);
+}
+
+function renderConj(verb, fid) {
+  conjCur = { verb, fid };
+  const f = CONJ_FORMS.find(x => x.id === fid);
+  document.getElementById('conj-form-label').textContent = '활용 만들기';
+  document.getElementById('conj-display').innerHTML = ruby(verb.dict.k, verb.dict.h);
+  document.getElementById('conj-question').innerHTML =
+    `<b>${verb.meaning}</b> 를 아래 뜻이 되도록 활용해 보세요.<br>` +
+    `<span class="target-badge">${f.nuance}</span>`;
+  const inp = document.getElementById('conj-input');
+  inp.value=''; inp.className='answer-input'; inp.disabled=false;
+  document.getElementById('conj-result').style.display='none';
+  document.getElementById('conj-result').className='result-card';
+  document.getElementById('conj-next').style.display='none';
+  document.getElementById('conj-submit').style.display='';
+  updateConjBookmarkBtn();
+  inp.focus();
+}
+
+function conjEmpty(msg) {
+  conjCur = {};
+  document.getElementById('conj-form-label').textContent = '안내';
+  document.getElementById('conj-display').innerHTML = '🚫';
+  document.getElementById('conj-question').innerHTML = msg || '출제할 동사가 없어요. <b>＋ 동사</b>에서 체크박스를 켜주세요.';
+  const inp = document.getElementById('conj-input'); inp.value=''; inp.disabled=true;
+  document.getElementById('conj-submit').style.display='none';
+  document.getElementById('conj-next').style.display='none';
+  document.getElementById('conj-result').style.display='none';
+}
+
+function checkConjAnswer() {
+  const inp = document.getElementById('conj-input');
+  const user = norm(inp.value);
+  if (!user) { inp.focus(); return; }
+  const { verb, fid } = conjCur;
+  const ans = conjForm(verb, fid);
+  const ok = (user === norm(ans.h) || user === norm(ans.k));
+
+  conjStats.total++;
+  bumpVerbStat(verb, ok);
+  inp.disabled = true;
+  document.getElementById('conj-submit').style.display='none';
+  document.getElementById('conj-next').style.display='';
+
+  const rc = document.getElementById('conj-result');
+  rc.style.display='block';
+  const answerHtml = `<div class="correct-answer">${ruby(ans.k, ans.h)}</div>` +
+    `<div class="explanation">${ruby(verb.dict.k, verb.dict.h)} (${verb.meaning}) 의 <b>${conjLabel(fid)}</b></div>`;
+
+  if (ok) {
+    conjStats.correct++; conjStats.streak++;
+    if (conjReviewMode) handleConjReviewCorrect();
+    inp.className='answer-input correct';
+    rc.className='result-card correct';
+    document.getElementById('conj-result-title').className='result-title correct';
+    document.getElementById('conj-result-title').textContent='✅ 정답!';
+    document.getElementById('conj-result-body').innerHTML = answerHtml;
+  } else {
+    conjStats.streak=0;
+    conjStats.wrongMap[ckey(verb,fid)] = (conjStats.wrongMap[ckey(verb,fid)] || { k:verb.dict.k, h:verb.dict.h, cnt:0 });
+    conjStats.wrongMap[ckey(verb,fid)].cnt++;
+    addConjWrong(verb, fid);
+    inp.className='answer-input wrong';
+    rc.className='result-card wrong';
+    document.getElementById('conj-result-title').className='result-title wrong';
+    document.getElementById('conj-result-title').textContent='❌ 오답';
+    document.getElementById('conj-result-body').innerHTML =
+      `<div style="font-size:12px;color:#999;margin-bottom:2px">정답</div>` + answerHtml;
+  }
+  updateScoreDisplay();
+  saveConjStats();
+}
+
+// ── 활용 복습(별도) ──
+function updateConjBookmarkBtn() {
+  const btn = document.getElementById('conj-bookmark-btn');
+  if (!conjCur.verb) { btn.textContent='🔖'; btn.style.opacity=0.55; return; }
+  const it = conjReview[ckey(conjCur.verb, conjCur.fid)];
+  const marked = !!(it && it.m);
+  btn.textContent = marked ? '⭐' : '🔖';
+  btn.style.opacity = marked ? 1 : 0.55;
+}
+function addConjWrong(verb, fid) {
+  const k = ckey(verb, fid);
+  if (!conjReview[k]) conjReview[k] = { v:verb, fid, w:0, m:false };
+  conjReview[k].w++;
+  saveConjReview(); updateReviewBadge();
+}
+function toggleConjBookmark() {
+  if (!conjCur.verb) return;
+  const k = ckey(conjCur.verb, conjCur.fid);
+  if (conjReview[k]) { conjReview[k].m = !conjReview[k].m; if (!conjReview[k].m && conjReview[k].w === 0) delete conjReview[k]; }
+  else conjReview[k] = { v:conjCur.verb, fid:conjCur.fid, w:0, m:true };
+  saveConjReview(); updateConjBookmarkBtn(); updateReviewBadge();
+}
+function handleConjReviewCorrect() {
+  const k = ckey(conjCur.verb, conjCur.fid);
+  const it = conjReview[k];
+  if (it && !it.m) { delete conjReview[k]; saveConjReview(); conjReviewQueue = conjReviewQueue.filter(x => x !== k); }
+  updateReviewBadge();
+}
+function openConjReview() { renderConjReviewList(); document.getElementById('modal-conj-review').classList.add('open'); }
+function renderConjReviewList() {
+  const keys = Object.keys(conjReview);
+  const list = document.getElementById('conj-review-list');
+  const startBtn = document.getElementById('start-conj-review-btn');
+  if (!keys.length) {
+    list.innerHTML = '<div class="empty-msg">저장된 활용 복습이 없어요.<br>틀리거나 🔖로 저장하면 여기에 모입니다.</div>';
+    startBtn.style.display='none'; return;
+  }
+  startBtn.style.display='';
+  const rows = keys.map(k => ({ k, ...conjReview[k] })).sort((a,b) => (b.w - a.w) || (b.m - a.m));
+  list.innerHTML = rows.map(r => {
+    const tags=[]; if (r.w) tags.push(`<span class="rv-tag-wrong">❌ ${r.w}회</span>`); if (r.m) tags.push(`<span class="rv-tag-mark">⭐ 저장</span>`);
+    return `<div class="review-row"><div>
+      <div class="rv-main">${ruby(r.v.dict.k, r.v.dict.h)} <span style="color:#3b5bdb">→ ${conjLabel(r.fid)}</span></div>
+      <div class="rv-sub">${r.v.meaning} &nbsp;·&nbsp; ${tags.join(' &nbsp; ')}</div>
+    </div><button class="rv-del" onclick="removeConjReviewItem('${r.k}')" title="삭제">🗑️</button></div>`;
+  }).join('');
+}
+function removeConjReviewItem(k) { delete conjReview[k]; saveConjReview(); conjReviewQueue = conjReviewQueue.filter(x => x !== k); renderConjReviewList(); updateReviewBadge(); }
+function startConjReview() {
+  const keys = Object.keys(conjReview);
+  if (!keys.length) return;
+  conjReviewQueue = keys.slice();
+  conjReviewMode = true;
+  closeModal('modal-conj-review');
+  document.getElementById('conj-review-banner').classList.add('on');
+  newConjQuestion();
+}
+function newConjReviewQuestion() {
+  conjReviewQueue = conjReviewQueue.filter(k => conjReview[k]);
+  if (!conjReviewQueue.length) { exitConjReview(true); return; }
+  const k = rand(conjReviewQueue);
+  const it = conjReview[k];
+  document.getElementById('conj-review-banner-text').textContent = `🧩 활용 복습 · 남은 ${conjReviewQueue.length}개`;
+  renderConj(it.v, it.fid);
+}
+function exitConjReview(completed) {
+  conjReviewMode = false; conjReviewQueue = [];
+  document.getElementById('conj-review-banner').classList.remove('on');
+  if (completed) alert('활용 복습 완료! 틀렸던 문제를 모두 맞혔어요. 🎉\n(⭐ 저장한 문제는 목록에 남아있습니다.)');
+  newConjQuestion();
+}
+
 document.querySelectorAll('.modal-overlay').forEach(el => {
   el.addEventListener('click', e => {
     if (e.target !== el) return;
@@ -1633,6 +1926,10 @@ document.getElementById('next-btn').addEventListener('click', newQuestion);
 document.getElementById('memo-submit').addEventListener('click', checkMemoAnswer);
 document.getElementById('memo-input').addEventListener('keydown', e => { if (e.key === 'Enter') checkMemoAnswer(); });
 document.getElementById('memo-next').addEventListener('click', newMemoQuestion);
+
+document.getElementById('conj-submit').addEventListener('click', checkConjAnswer);
+document.getElementById('conj-input').addEventListener('keydown', e => { if (e.key === 'Enter') checkConjAnswer(); });
+document.getElementById('conj-next').addEventListener('click', newConjQuestion);
 
 ['a-dict-h','a-dict-k'].forEach(id => document.getElementById(id).addEventListener('input', updatePreview));
 document.getElementById('a-group').addEventListener('change', updatePreview);
