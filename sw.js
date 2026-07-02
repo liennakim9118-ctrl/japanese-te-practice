@@ -1,5 +1,5 @@
 // 오프라인 캐시: 앱 셸은 network-first(최신 유지), 사전은 cache-first(용량↑·변화 적음)
-const CACHE = 'jp-te-v2';
+const CACHE = 'jp-te-v3';
 const ASSETS = ['./', './index.html', './dict.js', './manifest.json'];
 
 self.addEventListener('install', e => {
