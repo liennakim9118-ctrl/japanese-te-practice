@@ -1085,6 +1085,7 @@ function checkAnswer() {
     stats.wrongMap[vkey(verb)] = (stats.wrongMap[vkey(verb)] || { k: verb.dict.k, h: verb.dict.h, cnt:0 });
     stats.wrongMap[vkey(verb)].cnt++;
     addWrong(verb, target);
+    if (reviewMode) handleReviewWrong();
     inp.className = 'answer-input wrong';
     rc.className = 'result-card wrong';
     document.getElementById('result-title').className = 'result-title wrong';
@@ -1655,6 +1656,12 @@ function handleReviewCorrect() {
   updateReviewBadge();
 }
 
+// 복습 모드에서 또 틀리면: 이번 회차 큐 뒤에 다시 넣어 맞힐 때까지 재출제(개수 안 줄어듦)
+function handleReviewWrong() {
+  const k = rkey(cur.verb, cur.target);
+  if (review[k] && !reviewQueue.includes(k)) reviewQueue.push(k);
+}
+
 function openReview() {
   renderReviewList();
   document.getElementById('modal-review').classList.add('open');
@@ -1862,6 +1869,7 @@ function checkMemoAnswer() {
     memoStats.wrongMap[vkey(verb)] = (memoStats.wrongMap[vkey(verb)] || { k:verb.dict.k, h:verb.dict.h, cnt:0 });
     memoStats.wrongMap[vkey(verb)].cnt++;
     addMemoWrong(verb);
+    if (memoReviewMode) handleMemoReviewWrong();
     inp.className='answer-input wrong';
     rc.className='result-card wrong';
     document.getElementById('memo-result-title').className='result-title wrong';
@@ -1930,6 +1938,11 @@ function handleMemoReviewCorrect() {
   if (it && !it.m) { delete memoReview[h]; saveMemoReview(); }
   memoReviewQueue = memoReviewQueue.filter(x => x !== h);
   updateReviewBadge();
+}
+// 복습 모드에서 또 틀리면: 이번 회차 큐 뒤에 다시 넣어 맞힐 때까지 재출제(개수 안 줄어듦)
+function handleMemoReviewWrong() {
+  const h = vkey(memoCur.verb);
+  if (memoReview[h] && !memoReviewQueue.includes(h)) memoReviewQueue.push(h);
 }
 function openMemoReview() { renderMemoReviewList(); document.getElementById('modal-memo-review').classList.add('open'); }
 function renderMemoReviewList() {
@@ -2059,6 +2072,7 @@ function checkConjAnswer() {
     conjStats.wrongMap[ckey(verb,fid)] = (conjStats.wrongMap[ckey(verb,fid)] || { k:verb.dict.k, h:verb.dict.h, cnt:0 });
     conjStats.wrongMap[ckey(verb,fid)].cnt++;
     addConjWrong(verb, fid);
+    if (conjReviewMode) handleConjReviewWrong();
     inp.className='answer-input wrong';
     rc.className='result-card wrong';
     document.getElementById('conj-result-title').className='result-title wrong';
@@ -2099,6 +2113,11 @@ function handleConjReviewCorrect() {
   if (it && !it.m) { delete conjReview[k]; saveConjReview(); }
   conjReviewQueue = conjReviewQueue.filter(x => x !== k);
   updateReviewBadge();
+}
+// 복습 모드에서 또 틀리면: 이번 회차 큐 뒤에 다시 넣어 맞힐 때까지 재출제(개수 안 줄어듦)
+function handleConjReviewWrong() {
+  const k = ckey(conjCur.verb, conjCur.fid);
+  if (conjReview[k] && !conjReviewQueue.includes(k)) conjReviewQueue.push(k);
 }
 function openConjReview() { renderConjReviewList(); document.getElementById('modal-conj-review').classList.add('open'); }
 function renderConjReviewList() {
