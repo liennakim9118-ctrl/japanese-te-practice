@@ -987,6 +987,20 @@ function drawVerb(mode) { return drawFromBag(mode, quizVerbs()); }
 let vocab = [];
 try { vocab = JSON.parse(localStorage.getItem('jp_vocab') || '[]'); } catch(e) {}
 function saveVocab() { localStorage.setItem('jp_vocab', JSON.stringify(vocab)); }
+
+// 기존에 암기 복습에만 ⭐ 되어 있던 '동사'를 て형·활용 복습에도 1회 동기화
+// (⭐ 3중 동기화 기능 이전에 별표한 동사들을 자동 반영. 이후 수동 삭제와 충돌하지 않도록 1회만)
+if (!localStorage.getItem('jp_star_sync_v1')) {
+  const verbMap = new Map(allVerbs().map(v => [vkey(v), v]));
+  for (const [k, it] of Object.entries(memoReview)) {
+    if (!it || !it.m || !verbMap.has(k)) continue;    // ⭐(m:true)인 동사만
+    const vObj = verbMap.get(k);                        // 최신 동사 객체 사용
+    if (!review[k])     review[k]     = { v: vObj, w: 0, m: true };
+    if (!conjReview[k]) conjReview[k] = { v: vObj, w: 0, m: true };
+  }
+  saveReview(); saveConjReview();
+  localStorage.setItem('jp_star_sync_v1', '1');
+}
 // 암기 전용 출제 제외(off) 집합 (te/conj의 disabledVerbs와 완전 별개)
 // 암기 출제 풀 = 숨김 아닌 모든 동사 + 표현 (중심 데이터)
 function memoItems() { return [...allVerbs(), ...vocab].filter(it => !hidden.has(vkey(it))); }
