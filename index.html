@@ -920,6 +920,21 @@ function saveConjReview() { localStorage.setItem('jp_conj_review', JSON.stringif
 let conjReviewMode = false, conjReviewQueue = [];
 const ckey = (verb, fid) => verb.dict.k + '|' + fid;
 
+// 구버전(동사+형태별) 복습 데이터를 단어 단위로 통합 마이그레이션
+function migrateReviewWordLevel(obj) {
+  const out = {}; let changed = false;
+  for (const [k, it] of Object.entries(obj)) {
+    if (!it || !it.v || !it.v.dict) { changed = true; continue; }
+    const nk = it.v.dict.k;
+    if (nk !== k || 't' in it || 'fid' in it) changed = true;
+    if (out[nk]) { out[nk].w += (it.w || 0); out[nk].m = out[nk].m || !!it.m; }
+    else out[nk] = { v: it.v, w: it.w || 0, m: !!it.m };
+  }
+  return { out, changed };
+}
+{ const r = migrateReviewWordLevel(review);     if (r.changed) { review = r.out;     saveReview(); } }
+{ const r = migrateReviewWordLevel(conjReview); if (r.changed) { conjReview = r.out; saveConjReview(); } }
+
 // 연습할 활용형 설정 (기본: 전체)
 let conjSettings = CONJ_FORMS.map(f => f.id);
 try { const s = JSON.parse(localStorage.getItem('jp_conj_forms') || 'null'); if (s && s.length) conjSettings = s; } catch(e) {}
@@ -1422,7 +1437,7 @@ function memoRowHtml(o, isHidden) {
   const rv = memoReview[vkey(v)];
   const starred = !!(rv && rv.m);
   const starBtn = !isHidden
-    ? `<button class="rv-del" style="color:${starred ? '#f5a623' : '#bbb'};font-size:15px" onclick="toggleMemoReviewFromList('${vkey(v)}')" title="${starred ? '암기 복습에서 제외' : '암기 복습에 추가'}">${starred ? '⭐' : '☆'}</button>`
+    ? `<button class="rv-del" style="color:${starred ? '#f5a623' : '#bbb'};font-size:15px" onclick="toggleStarFromList('${vkey(v)}')" title="${starred ? '복습에서 제외' : (isVerb ? 'て형·활용·암기 복습에 추가' : '암기 복습에 추가')}">${starred ? '⭐' : '☆'}</button>`
     : '';
   return `<div class="review-row">
     ${conjChk}
@@ -1432,18 +1447,19 @@ function memoRowHtml(o, isHidden) {
     </div>${starBtn}${toVerb}${hideBtn}${del}
   </div>`;
 }
-// 표현/동사 목록에서 ⭐로 암기 복습 목록에 추가·제외
-function toggleMemoReviewFromList(key) {
-  const it = memoReview[key];
-  if (it) {
-    it.m = !it.m;                                   // ⭐ 해제
-    if (!it.m && it.w === 0) delete memoReview[key]; // 오답 기록도 없으면 완전 제거
-  } else {
-    const o = memoListRows().find(o => vkey(o.v) === key);
-    if (!o) return;
-    memoReview[key] = { v: o.v, w: 0, m: true };     // ⭐ 저장 항목으로 추가
-  }
-  saveMemoReview();
+// 표현/동사 목록에서 ⭐로 복습 목록에 추가·제외
+// 동사면 암기·て형·활용 세 복습 모두 단어 단위로 등록, 표현이면 암기 복습만
+function toggleStarFromList(key) {
+  const o = memoListRows().find(o => vkey(o.v) === key);
+  if (!o) return;
+  const isVerb = o.kind === '동사';
+  const on = !(memoReview[key] && memoReview[key].m);   // 현재 ⭐ 상태 반전
+  const apply = (L) => {
+    if (on) { if (L[key]) L[key].m = true; else L[key] = { v: o.v, w: 0, m: true }; }
+    else if (L[key]) { L[key].m = false; if (L[key].w === 0) delete L[key]; } // 오답 기록 있으면 유지
+  };
+  apply(memoReview); saveMemoReview();
+  if (isVerb) { apply(review); saveReview(); apply(conjReview); saveConjReview(); }
   renderVocabList();
   updateReviewBadge();
 }
@@ -1472,7 +1488,7 @@ function renderVocabList() {
   if (q) rows = rows.filter(o => (o.v.dict.k + ' ' + o.v.dict.h + ' ' + o.v.meaning).includes(q));
   const vis = rows.filter(o => !hidden.has(vkey(o.v)));
   const list = document.getElementById('vocab-list');
-  let html = `<div style="font-size:11px;color:#999;margin-bottom:6px">암기 출제 ${vis.length}개 · 왼쪽 ☑︎=활용/て형 연습 포함(동사) · ⭐=암기 복습에 추가 · 🙈=숨김 (숨긴 항목은 ⚙️설정에서 관리)</div>`;
+  let html = `<div style="font-size:11px;color:#999;margin-bottom:6px">암기 출제 ${vis.length}개 · 왼쪽 ☑︎=활용/て형 연습 포함(동사) · ⭐=복습에 추가(동사는 て형·활용·암기 모두) · 🙈=숨김 (숨긴 항목은 ⚙️설정에서 관리)</div>`;
   html += vis.length ? vis.map(o => memoRowHtml(o, false)).join('') : '<div class="empty-msg">항목이 없어요.</div>';
   list.innerHTML = html;
 }
@@ -1634,40 +1650,40 @@ function openReviewByMode() { appMode === 'memo' ? openMemoReview() : appMode ==
 function updateBookmarkBtn() {
   const btn = document.getElementById('bookmark-btn');
   if (!cur.verb || !cur.target) { btn.textContent = '🔖'; btn.style.opacity = 0.55; return; }
-  const it = review[rkey(cur.verb, cur.target)];
+  const it = review[vkey(cur.verb)];   // 단어 단위 저장
   const marked = !!(it && it.m);
   btn.textContent = marked ? '⭐' : '🔖';
   btn.style.opacity = marked ? 1 : 0.55;
 }
 
-// 오답 시 자동으로 복습 컬렉션에 추가 (오답 횟수 누적)
+// 오답 시 자동으로 복습 컬렉션에 추가 (단어 단위, 오답 횟수 누적)
 function addWrong(verb, target) {
-  const k = rkey(verb, target);
-  if (!review[k]) review[k] = { v: verb, t: target.id, w: 0, m: false };
+  const k = vkey(verb);
+  if (!review[k]) review[k] = { v: verb, w: 0, m: false };
   review[k].w++;
   saveReview();
   updateReviewBadge();
 }
 
-// 🔖 버튼: 현재 문제 태깅 토글
+// 🔖 버튼: 현재 단어 태깅 토글
 function toggleBookmark() {
-  if (!cur.verb || !cur.target) return;
-  const k = rkey(cur.verb, cur.target);
+  if (!cur.verb) return;
+  const k = vkey(cur.verb);
   if (review[k]) {
     review[k].m = !review[k].m;
     if (!review[k].m && review[k].w === 0) delete review[k];   // 오답기록 없고 태깅 해제 → 완전 삭제
   } else {
-    review[k] = { v: cur.verb, t: cur.target.id, w: 0, m: true };
+    review[k] = { v: cur.verb, w: 0, m: true };
   }
   saveReview();
   updateBookmarkBtn();
   updateReviewBadge();
 }
 
-// 복습 모드에서 정답 시: 태깅 안 된 오답 문제는 마스터 처리(목록에서 제거)
+// 복습 모드에서 정답 시: 태깅 안 된 오답 단어는 마스터 처리(목록에서 제거)
 function handleReviewCorrect() {
-  // ❌(오답 수집) 문제는 맞히면 목록에서 영구 제거. ⭐(저장) 문제는 항상 유지.
-  const k = rkey(cur.verb, cur.target);
+  // ❌(오답 수집) 단어는 맞히면 목록에서 영구 제거. ⭐(저장) 단어는 항상 유지.
+  const k = vkey(cur.verb);
   const it = review[k];
   if (it && !it.m) {
     delete review[k];
@@ -1679,7 +1695,7 @@ function handleReviewCorrect() {
 
 // 복습 모드에서 또 틀리면: 이번 회차 큐 뒤에 다시 넣어 맞힐 때까지 재출제(개수 안 줄어듦)
 function handleReviewWrong() {
-  const k = rkey(cur.verb, cur.target);
+  const k = vkey(cur.verb);
   if (review[k] && !reviewQueue.includes(k)) reviewQueue.push(k);
 }
 
@@ -1701,14 +1717,14 @@ function renderReviewList() {
   const rows = keys.map(k => ({ k, ...review[k] }))
     .sort((a,b) => (b.w - a.w) || (b.m - a.m));
   list.innerHTML = rows.map(r => {
-    const v = r.v, tl = targetLabel(r.t);
+    const v = r.v;
     const tags = [];
     if (r.w) tags.push(`<span class="rv-tag-wrong">❌ ${r.w}회</span>`);
     if (r.m) tags.push(`<span class="rv-tag-mark">⭐ 저장</span>`);
     return `<div class="review-row">
       <div>
-        <div class="rv-main">${ruby(v.dict.k, v.dict.h)} <span style="color:#3b5bdb">→ ${tl}</span></div>
-        <div class="rv-sub">${v.meaning} &nbsp;·&nbsp; ${tags.join(' &nbsp; ')}</div>
+        <div class="rv-main">${ruby(v.dict.k, v.dict.h)} <span style="color:#888;font-weight:400">${v.meaning}</span></div>
+        <div class="rv-sub">🎲 て파생 랜덤 출제 &nbsp;·&nbsp; ${tags.join(' &nbsp; ')}</div>
       </div>
       <button class="rv-del" onclick="removeReviewItem('${r.k}')" title="삭제">🗑️</button>
     </div>`;
@@ -1745,7 +1761,7 @@ function newReviewQuestion() {
 
   const it = review[k];
   const verb = it.v;
-  const target = DERIVATIVES.find(d => d.id === it.t) || DERIVATIVES[0];
+  const target = rand(DERIVATIVES);   // 단어 단위 저장 → 매 출제마다 て파생 랜덤 선택
   cur = { verb, target };
 
   document.getElementById('review-banner-text').textContent = `🔖 복습 모드 · 남은 문제 ${reviewQueue.length + 1}개`;
@@ -2109,27 +2125,27 @@ function checkConjAnswer() {
 function updateConjBookmarkBtn() {
   const btn = document.getElementById('conj-bookmark-btn');
   if (!conjCur.verb) { btn.textContent='🔖'; btn.style.opacity=0.55; return; }
-  const it = conjReview[ckey(conjCur.verb, conjCur.fid)];
+  const it = conjReview[vkey(conjCur.verb)];   // 단어 단위 저장
   const marked = !!(it && it.m);
   btn.textContent = marked ? '⭐' : '🔖';
   btn.style.opacity = marked ? 1 : 0.55;
 }
 function addConjWrong(verb, fid) {
-  const k = ckey(verb, fid);
-  if (!conjReview[k]) conjReview[k] = { v:verb, fid, w:0, m:false };
+  const k = vkey(verb);
+  if (!conjReview[k]) conjReview[k] = { v:verb, w:0, m:false };
   conjReview[k].w++;
   saveConjReview(); updateReviewBadge();
 }
 function toggleConjBookmark() {
   if (!conjCur.verb) return;
-  const k = ckey(conjCur.verb, conjCur.fid);
+  const k = vkey(conjCur.verb);
   if (conjReview[k]) { conjReview[k].m = !conjReview[k].m; if (!conjReview[k].m && conjReview[k].w === 0) delete conjReview[k]; }
-  else conjReview[k] = { v:conjCur.verb, fid:conjCur.fid, w:0, m:true };
+  else conjReview[k] = { v:conjCur.verb, w:0, m:true };
   saveConjReview(); updateConjBookmarkBtn(); updateReviewBadge();
 }
 function handleConjReviewCorrect() {
-  // ❌(오답 수집) 문제는 맞히면 목록에서 영구 제거. ⭐(저장) 문제는 항상 유지.
-  const k = ckey(conjCur.verb, conjCur.fid);
+  // ❌(오답 수집) 단어는 맞히면 목록에서 영구 제거. ⭐(저장) 단어는 항상 유지.
+  const k = vkey(conjCur.verb);
   const it = conjReview[k];
   if (it && !it.m) { delete conjReview[k]; saveConjReview(); }
   conjReviewQueue = conjReviewQueue.filter(x => x !== k);
@@ -2137,7 +2153,7 @@ function handleConjReviewCorrect() {
 }
 // 복습 모드에서 또 틀리면: 이번 회차 큐 뒤에 다시 넣어 맞힐 때까지 재출제(개수 안 줄어듦)
 function handleConjReviewWrong() {
-  const k = ckey(conjCur.verb, conjCur.fid);
+  const k = vkey(conjCur.verb);
   if (conjReview[k] && !conjReviewQueue.includes(k)) conjReviewQueue.push(k);
 }
 function openConjReview() { renderConjReviewList(); document.getElementById('modal-conj-review').classList.add('open'); }
@@ -2154,8 +2170,8 @@ function renderConjReviewList() {
   list.innerHTML = rows.map(r => {
     const tags=[]; if (r.w) tags.push(`<span class="rv-tag-wrong">❌ ${r.w}회</span>`); if (r.m) tags.push(`<span class="rv-tag-mark">⭐ 저장</span>`);
     return `<div class="review-row"><div>
-      <div class="rv-main">${ruby(r.v.dict.k, r.v.dict.h)} <span style="color:#3b5bdb">→ ${conjLabel(r.fid)}</span></div>
-      <div class="rv-sub">${r.v.meaning} &nbsp;·&nbsp; ${tags.join(' &nbsp; ')}</div>
+      <div class="rv-main">${ruby(r.v.dict.k, r.v.dict.h)} <span style="color:#888;font-weight:400">${r.v.meaning}</span></div>
+      <div class="rv-sub">🎲 활용 랜덤 출제 &nbsp;·&nbsp; ${tags.join(' &nbsp; ')}</div>
     </div><button class="rv-del" onclick="removeConjReviewItem('${r.k}')" title="삭제">🗑️</button></div>`;
   }).join('');
 }
@@ -2180,7 +2196,7 @@ function newConjReviewQuestion() {
   if (!k) { exitConjReview(true); return; }
   const it = conjReview[k];
   document.getElementById('conj-review-banner-text').textContent = `🧩 활용 복습 · 남은 ${conjReviewQueue.length + 1}개`;
-  renderConj(it.v, it.fid);
+  renderConj(it.v, rand(CONJ_FORMS).id);   // 단어 단위 저장 → 매 출제마다 활용 랜덤 선택
 }
 function exitConjReview(completed) {
   conjReviewMode = false; conjReviewQueue = [];
