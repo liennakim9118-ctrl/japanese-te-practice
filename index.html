@@ -1418,13 +1418,34 @@ function memoRowHtml(o, isHidden) {
   const toVerb = (o.kind === '표현' && !isHidden)
     ? `<button class="rv-del" style="color:#3b5bdb;font-size:12px" onclick="convertVocabToVerb('${vkey(v)}')" title="동사로 전환(활용 연습 가능)">→동사</button>` : '';
   const del = o.del ? `<button class="rv-del" onclick="deleteMemoItem('${o.del}','${vkey(v)}')" title="삭제">🗑️</button>` : '';
+  // ⭐ 암기 복습 목록에 추가/제외 토글
+  const rv = memoReview[vkey(v)];
+  const starred = !!(rv && rv.m);
+  const starBtn = !isHidden
+    ? `<button class="rv-del" style="color:${starred ? '#f5a623' : '#bbb'};font-size:15px" onclick="toggleMemoReviewFromList('${vkey(v)}')" title="${starred ? '암기 복습에서 제외' : '암기 복습에 추가'}">${starred ? '⭐' : '☆'}</button>`
+    : '';
   return `<div class="review-row">
     ${conjChk}
     <div style="flex:1">
       <div class="rv-main">${ruby(v.dict.k, v.dict.h)} <span style="color:#888;font-weight:400">${v.meaning}</span> ${tag}</div>
       <div class="rv-sub">${v.exJp ? '📝 · ' : ''}푼 <b>${s.total}</b> · 맞춤 <b style="color:#2e7d32">${s.correct}</b> · 틀림 <b style="color:#e53935">${s.wrong}</b></div>
-    </div>${toVerb}${hideBtn}${del}
+    </div>${starBtn}${toVerb}${hideBtn}${del}
   </div>`;
+}
+// 표현/동사 목록에서 ⭐로 암기 복습 목록에 추가·제외
+function toggleMemoReviewFromList(key) {
+  const it = memoReview[key];
+  if (it) {
+    it.m = !it.m;                                   // ⭐ 해제
+    if (!it.m && it.w === 0) delete memoReview[key]; // 오답 기록도 없으면 완전 제거
+  } else {
+    const o = memoListRows().find(o => vkey(o.v) === key);
+    if (!o) return;
+    memoReview[key] = { v: o.v, w: 0, m: true };     // ⭐ 저장 항목으로 추가
+  }
+  saveMemoReview();
+  renderVocabList();
+  updateReviewBadge();
 }
 // 표현 → 동사 전환 (활용형 자동 생성)
 function convertVocabToVerb(key) {
@@ -1451,7 +1472,7 @@ function renderVocabList() {
   if (q) rows = rows.filter(o => (o.v.dict.k + ' ' + o.v.dict.h + ' ' + o.v.meaning).includes(q));
   const vis = rows.filter(o => !hidden.has(vkey(o.v)));
   const list = document.getElementById('vocab-list');
-  let html = `<div style="font-size:11px;color:#999;margin-bottom:6px">암기 출제 ${vis.length}개 · 왼쪽 ☑︎=활용/て형 연습 포함(동사) · 🙈=숨김 (숨긴 항목은 ⚙️설정에서 관리)</div>`;
+  let html = `<div style="font-size:11px;color:#999;margin-bottom:6px">암기 출제 ${vis.length}개 · 왼쪽 ☑︎=활용/て형 연습 포함(동사) · ⭐=암기 복습에 추가 · 🙈=숨김 (숨긴 항목은 ⚙️설정에서 관리)</div>`;
   html += vis.length ? vis.map(o => memoRowHtml(o, false)).join('') : '<div class="empty-msg">항목이 없어요.</div>';
   list.innerHTML = html;
 }
