@@ -1644,13 +1644,14 @@ function toggleBookmark() {
 
 // 복습 모드에서 정답 시: 태깅 안 된 오답 문제는 마스터 처리(목록에서 제거)
 function handleReviewCorrect() {
+  // ❌(오답 수집) 문제는 맞히면 목록에서 영구 제거. ⭐(저장) 문제는 항상 유지.
   const k = rkey(cur.verb, cur.target);
   const it = review[k];
   if (it && !it.m) {
     delete review[k];
     saveReview();
-    reviewQueue = reviewQueue.filter(x => x !== k);
   }
+  reviewQueue = reviewQueue.filter(x => x !== k);
   updateReviewBadge();
 }
 
@@ -1697,7 +1698,8 @@ function removeReviewItem(k) {
 function startReview() {
   const keys = Object.keys(review);
   if (!keys.length) return;
-  reviewQueue = keys.slice();
+  // 이번 복습에서 각 문제를 딱 한 번씩만 출제 (셔플 후 순차 소비)
+  reviewQueue = shuffle(keys.slice());
   reviewMode = true;
   closeModal('modal-review');
   document.getElementById('review-banner').classList.add('on');
@@ -1705,16 +1707,20 @@ function startReview() {
 }
 
 function newReviewQuestion() {
-  reviewQueue = reviewQueue.filter(k => review[k]);   // 삭제된 항목 정리
-  if (!reviewQueue.length) { exitReview(true); return; }
+  // 큐에서 앞에서부터 하나씩 꺼내 출제(무작위 반복 없음). 그 사이 제거된 항목은 건너뜀.
+  let k = null;
+  while (reviewQueue.length) {
+    const cand = reviewQueue.shift();
+    if (review[cand]) { k = cand; break; }
+  }
+  if (!k) { exitReview(true); return; }
 
-  const k = rand(reviewQueue);
   const it = review[k];
   const verb = it.v;
   const target = DERIVATIVES.find(d => d.id === it.t) || DERIVATIVES[0];
   cur = { verb, target };
 
-  document.getElementById('review-banner-text').textContent = `🔖 복습 모드 · 남은 문제 ${reviewQueue.length}개`;
+  document.getElementById('review-banner-text').textContent = `🔖 복습 모드 · 남은 문제 ${reviewQueue.length + 1}개`;
   document.getElementById('given-form-label').textContent = '기본형 (~한다)';
   document.getElementById('verb-display').innerHTML = ruby(verb.dict.k, verb.dict.h);
   document.getElementById('question-text').innerHTML =
@@ -1735,7 +1741,10 @@ function exitReview(completed) {
   reviewMode = false;
   reviewQueue = [];
   document.getElementById('review-banner').classList.remove('on');
-  if (completed) alert('복습 완료! 틀렸던 문제를 모두 맞혔어요. 🎉\n(⭐ 저장한 문제는 목록에 그대로 남아있습니다.)');
+  if (completed) {
+    const left = Object.keys(review).length;
+    alert(`복습 완료! 🎉\n맞힌 ❌ 문제는 목록에서 빠졌어요.\n다음 복습 대상 ${left}개 남음 (⭐ 저장 문제 + 아직 못 맞힌 ❌ 문제).`);
+  }
   newQuestion();
 }
 
@@ -2084,9 +2093,11 @@ function toggleConjBookmark() {
   saveConjReview(); updateConjBookmarkBtn(); updateReviewBadge();
 }
 function handleConjReviewCorrect() {
+  // ❌(오답 수집) 문제는 맞히면 목록에서 영구 제거. ⭐(저장) 문제는 항상 유지.
   const k = ckey(conjCur.verb, conjCur.fid);
   const it = conjReview[k];
-  if (it && !it.m) { delete conjReview[k]; saveConjReview(); conjReviewQueue = conjReviewQueue.filter(x => x !== k); }
+  if (it && !it.m) { delete conjReview[k]; saveConjReview(); }
+  conjReviewQueue = conjReviewQueue.filter(x => x !== k);
   updateReviewBadge();
 }
 function openConjReview() { renderConjReviewList(); document.getElementById('modal-conj-review').classList.add('open'); }
@@ -2112,24 +2123,32 @@ function removeConjReviewItem(k) { delete conjReview[k]; saveConjReview(); conjR
 function startConjReview() {
   const keys = Object.keys(conjReview);
   if (!keys.length) return;
-  conjReviewQueue = keys.slice();
+  // 이번 복습에서 각 문제를 딱 한 번씩만 출제 (셔플 후 순차 소비)
+  conjReviewQueue = shuffle(keys.slice());
   conjReviewMode = true;
   closeModal('modal-conj-review');
   document.getElementById('conj-review-banner').classList.add('on');
   newConjQuestion();
 }
 function newConjReviewQuestion() {
-  conjReviewQueue = conjReviewQueue.filter(k => conjReview[k]);
-  if (!conjReviewQueue.length) { exitConjReview(true); return; }
-  const k = rand(conjReviewQueue);
+  // 큐에서 앞에서부터 하나씩 꺼내 출제(무작위 반복 없음). 그 사이 제거된 항목은 건너뜀.
+  let k = null;
+  while (conjReviewQueue.length) {
+    const cand = conjReviewQueue.shift();
+    if (conjReview[cand]) { k = cand; break; }
+  }
+  if (!k) { exitConjReview(true); return; }
   const it = conjReview[k];
-  document.getElementById('conj-review-banner-text').textContent = `🧩 활용 복습 · 남은 ${conjReviewQueue.length}개`;
+  document.getElementById('conj-review-banner-text').textContent = `🧩 활용 복습 · 남은 ${conjReviewQueue.length + 1}개`;
   renderConj(it.v, it.fid);
 }
 function exitConjReview(completed) {
   conjReviewMode = false; conjReviewQueue = [];
   document.getElementById('conj-review-banner').classList.remove('on');
-  if (completed) alert('활용 복습 완료! 틀렸던 문제를 모두 맞혔어요. 🎉\n(⭐ 저장한 문제는 목록에 남아있습니다.)');
+  if (completed) {
+    const left = Object.keys(conjReview).length;
+    alert(`활용 복습 완료! 🎉\n맞힌 ❌ 문제는 목록에서 빠졌어요.\n다음 복습 대상 ${left}개 남음 (⭐ 저장 문제 + 아직 못 맞힌 ❌ 문제).`);
+  }
   newConjQuestion();
 }
 
