@@ -990,16 +990,27 @@ function saveVocab() { localStorage.setItem('jp_vocab', JSON.stringify(vocab)); 
 
 // 기존에 암기 복습에만 ⭐ 되어 있던 '동사'를 て형·활용 복습에도 1회 동기화
 // (⭐ 3중 동기화 기능 이전에 별표한 동사들을 자동 반영. 이후 수동 삭제와 충돌하지 않도록 1회만)
-if (!localStorage.getItem('jp_star_sync_v1')) {
+if (!localStorage.getItem('jp_star_sync_v2')) {
   const verbMap = new Map(allVerbs().map(v => [vkey(v), v]));
+  // 암기 복습의 ⭐ 동사 → て형·활용 복습에 보강
   for (const [k, it] of Object.entries(memoReview)) {
     if (!it || !it.m || !verbMap.has(k)) continue;    // ⭐(m:true)인 동사만
     const vObj = verbMap.get(k);                        // 최신 동사 객체 사용
     if (!review[k])     review[k]     = { v: vObj, w: 0, m: true };
     if (!conjReview[k]) conjReview[k] = { v: vObj, w: 0, m: true };
   }
-  saveReview(); saveConjReview();
-  localStorage.setItem('jp_star_sync_v1', '1');
+  // 반대로 te형/활용에서만 ⭐ 되어 있던 동사도 세 복습 모두로 보강
+  for (const src of [review, conjReview]) {
+    for (const [k, it] of Object.entries(src)) {
+      if (!it || !it.m || !verbMap.has(k)) continue;
+      const vObj = verbMap.get(k);
+      if (!memoReview[k]) memoReview[k] = { v: vObj, w: 0, m: true };
+      if (!review[k])     review[k]     = { v: vObj, w: 0, m: true };
+      if (!conjReview[k]) conjReview[k] = { v: vObj, w: 0, m: true };
+    }
+  }
+  saveMemoReview(); saveReview(); saveConjReview();
+  localStorage.setItem('jp_star_sync_v2', '1');
 }
 // 암기 전용 출제 제외(off) 집합 (te/conj의 disabledVerbs와 완전 별개)
 // 암기 출제 풀 = 숨김 아닌 모든 동사 + 표현 (중심 데이터)
@@ -1461,21 +1472,12 @@ function memoRowHtml(o, isHidden) {
     </div>${starBtn}${toVerb}${hideBtn}${del}
   </div>`;
 }
-// 표현/동사 목록에서 ⭐로 복습 목록에 추가·제외
-// 동사면 암기·て형·활용 세 복습 모두 단어 단위로 등록, 표현이면 암기 복습만
+// 표현/동사 목록에서 ⭐로 복습 목록에 추가·제외 (통합 toggleStar 사용)
 function toggleStarFromList(key) {
   const o = memoListRows().find(o => vkey(o.v) === key);
   if (!o) return;
-  const isVerb = o.kind === '동사';
-  const on = !(memoReview[key] && memoReview[key].m);   // 현재 ⭐ 상태 반전
-  const apply = (L) => {
-    if (on) { if (L[key]) L[key].m = true; else L[key] = { v: o.v, w: 0, m: true }; }
-    else if (L[key]) { L[key].m = false; if (L[key].w === 0) delete L[key]; } // 오답 기록 있으면 유지
-  };
-  apply(memoReview); saveMemoReview();
-  if (isVerb) { apply(review); saveReview(); apply(conjReview); saveConjReview(); }
+  toggleStar(o.v);
   renderVocabList();
-  updateReviewBadge();
 }
 // 표현 → 동사 전환 (활용형 자동 생성)
 function convertVocabToVerb(key) {
@@ -1680,18 +1682,27 @@ function addWrong(verb, target) {
 }
 
 // 🔖 버튼: 현재 단어 태깅 토글
+// 통합 ⭐ 토글: 동사면 て형·활용·암기 세 복습 모두, 표현이면 암기만 (단어 단위)
+function toggleStar(v) {
+  if (!v) return;
+  const key = vkey(v);
+  const isVerb = allVerbs().some(x => vkey(x) === key);
+  const on = !(memoReview[key] && memoReview[key].m);   // 현재 ⭐ 상태 반전
+  const targets = isVerb
+    ? [[memoReview, saveMemoReview], [review, saveReview], [conjReview, saveConjReview]]
+    : [[memoReview, saveMemoReview]];
+  targets.forEach(([L, save]) => {
+    if (on) { if (L[key]) L[key].m = true; else L[key] = { v, w: 0, m: true }; }
+    else if (L[key]) { L[key].m = false; if (L[key].w === 0) delete L[key]; }  // 오답 기록 있으면 유지
+    save();
+  });
+  updateReviewBadge();
+}
+
 function toggleBookmark() {
   if (!cur.verb) return;
-  const k = vkey(cur.verb);
-  if (review[k]) {
-    review[k].m = !review[k].m;
-    if (!review[k].m && review[k].w === 0) delete review[k];   // 오답기록 없고 태깅 해제 → 완전 삭제
-  } else {
-    review[k] = { v: cur.verb, w: 0, m: true };
-  }
-  saveReview();
+  toggleStar(cur.verb);
   updateBookmarkBtn();
-  updateReviewBadge();
 }
 
 // 복습 모드에서 정답 시: 태깅 안 된 오답 단어는 마스터 처리(목록에서 제거)
@@ -1977,10 +1988,8 @@ function addMemoWrong(verb) {
 }
 function toggleMemoBookmark() {
   if (!memoCur.verb) return;
-  const h = vkey(memoCur.verb);
-  if (memoReview[h]) { memoReview[h].m = !memoReview[h].m; if (!memoReview[h].m && memoReview[h].w === 0) delete memoReview[h]; }
-  else memoReview[h] = { v:memoCur.verb, w:0, m:true };
-  saveMemoReview(); updateMemoBookmarkBtn(); updateReviewBadge();
+  toggleStar(memoCur.verb);
+  updateMemoBookmarkBtn();
 }
 function handleMemoReviewCorrect() {
   // ❌(오답 수집) 단어는 맞히면 복습 목록에서 영구 제거. ⭐(저장) 단어는 항상 유지.
@@ -2152,10 +2161,8 @@ function addConjWrong(verb, fid) {
 }
 function toggleConjBookmark() {
   if (!conjCur.verb) return;
-  const k = vkey(conjCur.verb);
-  if (conjReview[k]) { conjReview[k].m = !conjReview[k].m; if (!conjReview[k].m && conjReview[k].w === 0) delete conjReview[k]; }
-  else conjReview[k] = { v:conjCur.verb, w:0, m:true };
-  saveConjReview(); updateConjBookmarkBtn(); updateReviewBadge();
+  toggleStar(conjCur.verb);
+  updateConjBookmarkBtn();
 }
 function handleConjReviewCorrect() {
   // ❌(오답 수집) 단어는 맞히면 목록에서 영구 제거. ⭐(저장) 단어는 항상 유지.
