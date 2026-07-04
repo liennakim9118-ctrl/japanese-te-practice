@@ -475,6 +475,9 @@ ruby rt {
       <button onclick="exitMemoReview(false)">복습 종료</button>
     </div>
 
+    <!-- 일반 암기 라운드 진행 표시 -->
+    <div id="memo-progress" style="display:none;text-align:center;font-size:12px;color:#3b5bdb;font-weight:700;margin:2px 0 8px"></div>
+
     <div class="card" id="memo-card">
       <div class="card-top">
         <span class="form-badge" id="memo-form-label">뜻 맞히기</span>
@@ -900,6 +903,8 @@ let memoReview = {};
 try { memoReview = JSON.parse(localStorage.getItem('jp_memo_review') || '{}'); } catch(e) {}
 function saveMemoReview() { localStorage.setItem('jp_memo_review', JSON.stringify(memoReview)); }
 let memoReviewMode = false, memoReviewQueue = [];
+// 일반 암기(뜻 맞히기) 라운드: 전체 단어를 한 바퀴씩, 오답은 맞힐 때까지 반복
+let memoRoundQueue = [], memoRoundTotal = 0, memoRoundCurKey = null, memoRoundStarted = false, memoRoundSig = '';
 
 // 암기 방향 설정: false=일→한만, true=한↔일 랜덤
 let memoBidir = false;
@@ -1853,10 +1858,40 @@ function matchMeaning(user, meaning) {
 function newMemoQuestion() {
   rolloverMemoStats();
   if (memoReviewMode) { newMemoReviewQuestion(); return; }
-  const verb = drawFromBag('memo', memoItems());
-  if (!verb) { memoEmpty(); return; }
-  const dir = memoBidir ? rand(['jp2ko','ko2jp']) : 'jp2ko';
-  renderMemo(verb, dir);
+  const items = memoItems();
+  if (!items.length) { memoCur = {}; memoEmpty(); updateMemoProgress(); return; }
+  const map = new Map(items.map(v => [vkey(v), v]));
+  // 출제 단어 구성이 바뀌면(추가·숨김·삭제) 라운드를 새로 시작해 전체 개수 갱신
+  const sig = [...map.keys()].join('|');
+  if (sig !== memoRoundSig) { memoRoundSig = sig; memoRoundQueue = []; memoRoundStarted = false; }
+  // 이번 라운드의 다음(아직 안 푼) 단어 뽑기. 사라진 항목은 건너뜀
+  let key = null;
+  while (memoRoundQueue.length) { const c = memoRoundQueue.shift(); if (map.has(c)) { key = c; break; } }
+  if (!key) {
+    // 한 바퀴 완료(또는 최초 시작) → 새 라운드 준비
+    if (memoRoundStarted) alert(`한 바퀴 완료! 🎉 전체 ${memoRoundTotal}개를 다 풀었어요.\n새 라운드를 시작합니다.`);
+    memoRoundQueue = shuffle(items.map(vkey));
+    memoRoundTotal = memoRoundQueue.length;
+    memoRoundStarted = true;
+    key = memoRoundQueue.shift();
+  }
+  memoRoundCurKey = key;
+  renderMemo(map.get(key), memoBidir ? rand(['jp2ko','ko2jp']) : 'jp2ko');
+  updateMemoProgress();   // renderMemo가 memoCur를 세팅한 뒤 표시 갱신
+}
+
+// 상단 진행 표시: 이번 라운드 남은 개수(현재 문제 포함) / 전체
+function updateMemoProgress() {
+  const el = document.getElementById('memo-progress');
+  if (!el) return;
+  if (memoReviewMode || !memoRoundTotal || !memoCur.verb) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.textContent = `📚 이번 라운드 남은 ${memoRoundQueue.length + 1} / 전체 ${memoRoundTotal}개`;
+}
+
+// 일반 라운드에서 틀리면: 이번 라운드 큐 뒤에 다시 넣어 맞힐 때까지 재출제(개수 안 줄어듦)
+function handleMemoRoundWrong() {
+  if (memoRoundCurKey && !memoRoundQueue.includes(memoRoundCurKey)) memoRoundQueue.push(memoRoundCurKey);
 }
 
 function renderMemo(verb, dir) {
@@ -1931,7 +1966,7 @@ function checkMemoAnswer() {
     memoStats.wrongMap[vkey(verb)] = (memoStats.wrongMap[vkey(verb)] || { k:verb.dict.k, h:verb.dict.h, cnt:0 });
     memoStats.wrongMap[vkey(verb)].cnt++;
     addMemoWrong(verb);
-    if (memoReviewMode) handleMemoReviewWrong();
+    if (memoReviewMode) handleMemoReviewWrong(); else handleMemoRoundWrong();
     inp.className='answer-input wrong';
     rc.className='result-card wrong';
     document.getElementById('memo-result-title').className='result-title wrong';
@@ -1958,6 +1993,7 @@ function memoSelfCorrect() {
   const it = memoReview[vkey(verb)];
   if (it) { it.w = Math.max(0, it.w - 1); if (it.w === 0 && !it.m) delete memoReview[vkey(verb)]; saveMemoReview(); }
   if (memoReviewMode) handleMemoReviewCorrect();
+  else memoRoundQueue = memoRoundQueue.filter(k => k !== memoRoundCurKey); // 정답 처리 → 라운드에서 다시 안 나오게
   const rc = document.getElementById('memo-result');
   rc.className='result-card correct';
   document.getElementById('memo-input').className='answer-input correct';
@@ -2032,6 +2068,7 @@ function startMemoReview() {
   memoReviewMode = true;
   closeModal('modal-memo-review');
   document.getElementById('memo-review-banner').classList.add('on');
+  document.getElementById('memo-progress').style.display = 'none';   // 복습 중엔 라운드 진행 표시 숨김
   newMemoQuestion();
 }
 function newMemoReviewQuestion() {
