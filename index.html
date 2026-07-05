@@ -435,6 +435,9 @@ ruby rt {
     <button onclick="exitReview(false)">복습 종료</button>
   </div>
 
+  <!-- 일반 연습 라운드 진행 표시 -->
+  <div id="te-progress" style="display:none;text-align:center;font-size:12px;color:#3b5bdb;font-weight:700;margin:2px 0 8px"></div>
+
   <!-- Problem Card -->
   <div class="card" id="problem-card">
     <div class="card-top">
@@ -508,6 +511,9 @@ ruby rt {
       <span id="conj-review-banner-text">🧩 활용 복습 모드</span>
       <button onclick="exitConjReview(false)">복습 종료</button>
     </div>
+
+    <!-- 일반 연습 라운드 진행 표시 -->
+    <div id="conj-progress" style="display:none;text-align:center;font-size:12px;color:#3b5bdb;font-weight:700;margin:2px 0 8px"></div>
 
     <div class="card" id="conj-card">
       <div class="card-top">
@@ -884,6 +890,8 @@ const rkey = (verb, target) => verb.dict.k + '|' + target.id;
 
 let reviewMode = false;
 let reviewQueue = [];
+// て형 일반 연습 라운드: 전체 동사를 한 바퀴씩, 오답은 맞힐 때까지 반복
+let teRoundQueue = [], teRoundTotal = 0, teRoundCurKey = null, teRoundStarted = false, teRoundSig = '';
 
 let cur = {};
 
@@ -923,6 +931,8 @@ let conjReview = {};
 try { conjReview = JSON.parse(localStorage.getItem('jp_conj_review') || '{}'); } catch(e) {}
 function saveConjReview() { localStorage.setItem('jp_conj_review', JSON.stringify(conjReview)); }
 let conjReviewMode = false, conjReviewQueue = [];
+// 활용 일반 연습 라운드: 전체 동사를 한 바퀴씩, 오답은 맞힐 때까지 반복
+let conjRoundQueue = [], conjRoundTotal = 0, conjRoundCurKey = null, conjRoundStarted = false, conjRoundSig = '';
 const ckey = (verb, fid) => verb.dict.k + '|' + fid;
 
 // 구버전(동사+형태별) 복습 데이터를 단어 단위로 통합 마이그레이션
@@ -1027,8 +1037,9 @@ function memoItems() { return [...allVerbs(), ...vocab].filter(it => !hidden.has
 function newQuestion() {
   rolloverStats();
   if (reviewMode) { newReviewQuestion(); return; }
-  const verb = drawVerb('te');
-  if (!verb) {
+  const pool = quizVerbs();
+  if (!pool.length) {
+    cur = {};
     document.getElementById('given-form-label').textContent = '안내';
     document.getElementById('verb-display').innerHTML = '🚫';
     document.getElementById('question-text').innerHTML = '출제할 동사가 없어요.<br><b>＋ 동사</b> 목록에서 체크박스를 켜서 동사를 활성화해 주세요.';
@@ -1037,8 +1048,24 @@ function newQuestion() {
     document.getElementById('submit-btn').style.display = 'none';
     document.getElementById('next-btn').style.display = 'none';
     document.getElementById('result-card').style.display = 'none';
+    updateTeProgress();
     return;
   }
+  // 라운드: 전체 동사를 한 바퀴씩. 구성이 바뀌면 새 라운드
+  const map = new Map(pool.map(v => [vkey(v), v]));
+  const sig = [...map.keys()].join('|');
+  if (sig !== teRoundSig) { teRoundSig = sig; teRoundQueue = []; teRoundStarted = false; }
+  let rkeyPick = null;
+  while (teRoundQueue.length) { const c = teRoundQueue.shift(); if (map.has(c)) { rkeyPick = c; break; } }
+  if (!rkeyPick) {
+    if (teRoundStarted) alert(`한 바퀴 완료! 🎉 전체 ${teRoundTotal}개 동사를 다 풀었어요.\n새 라운드를 시작합니다.`);
+    teRoundQueue = shuffle(pool.map(vkey));
+    teRoundTotal = teRoundQueue.length;
+    teRoundStarted = true;
+    rkeyPick = teRoundQueue.shift();
+  }
+  teRoundCurKey = rkeyPick;
+  const verb = map.get(rkeyPick);
 
   const enabledD = DERIVATIVES.filter(d => settings.derivs.includes(d.id));
   const enabledG = GIVEN_FORMS .filter(f => settings.givens.includes(f.id));
@@ -1082,7 +1109,21 @@ function newQuestion() {
   document.getElementById('next-btn').style.display = 'none';
   document.getElementById('submit-btn').style.display = '';
   updateBookmarkBtn();
+  updateTeProgress();
   inp.focus();
+}
+
+// 상단 진행 표시: 이번 라운드 남은 개수(현재 문제 포함) / 전체
+function updateTeProgress() {
+  const el = document.getElementById('te-progress');
+  if (!el) return;
+  if (reviewMode || !teRoundTotal || !cur.verb) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.textContent = `📚 이번 라운드 남은 ${teRoundQueue.length + 1} / 전체 ${teRoundTotal}개`;
+}
+// 일반 라운드에서 틀리면: 이번 라운드 큐 뒤에 다시 넣어 맞힐 때까지 재출제
+function handleTeRoundWrong() {
+  if (teRoundCurKey && !teRoundQueue.includes(teRoundCurKey)) teRoundQueue.push(teRoundCurKey);
 }
 
 // ═══════════════════════════════════════════════════
@@ -1130,7 +1171,7 @@ function checkAnswer() {
     stats.wrongMap[vkey(verb)] = (stats.wrongMap[vkey(verb)] || { k: verb.dict.k, h: verb.dict.h, cnt:0 });
     stats.wrongMap[vkey(verb)].cnt++;
     addWrong(verb, target);
-    if (reviewMode) handleReviewWrong();
+    if (reviewMode) handleReviewWrong(); else handleTeRoundWrong();
     inp.className = 'answer-input wrong';
     rc.className = 'result-card wrong';
     document.getElementById('result-title').className = 'result-title wrong';
@@ -1777,6 +1818,7 @@ function startReview() {
   reviewMode = true;
   closeModal('modal-review');
   document.getElementById('review-banner').classList.add('on');
+  document.getElementById('te-progress').style.display = 'none';   // 복습 중엔 라운드 진행 표시 숨김
   newQuestion();
 }
 
@@ -2101,11 +2143,38 @@ function exitMemoReview(completed) {
 function newConjQuestion() {
   rolloverConjStats();
   if (conjReviewMode) { newConjReviewQuestion(); return; }
-  const verb = drawVerb('conj');
-  if (!verb) { conjEmpty(); return; }
+  const pool = quizVerbs();
+  if (!pool.length) { conjCur = {}; conjEmpty(); updateConjProgress(); return; }
   const forms = CONJ_FORMS.filter(f => conjSettings.includes(f.id));
   if (!forms.length) { conjEmpty('설정에서 연습할 활용형을 최소 1개 켜주세요.'); return; }
-  renderConj(verb, rand(forms).id);
+  // 라운드: 전체 동사를 한 바퀴씩. 구성이 바뀌면 새 라운드
+  const map = new Map(pool.map(v => [vkey(v), v]));
+  const sig = [...map.keys()].join('|');
+  if (sig !== conjRoundSig) { conjRoundSig = sig; conjRoundQueue = []; conjRoundStarted = false; }
+  let key = null;
+  while (conjRoundQueue.length) { const c = conjRoundQueue.shift(); if (map.has(c)) { key = c; break; } }
+  if (!key) {
+    if (conjRoundStarted) alert(`한 바퀴 완료! 🎉 전체 ${conjRoundTotal}개 동사를 다 풀었어요.\n새 라운드를 시작합니다.`);
+    conjRoundQueue = shuffle(pool.map(vkey));
+    conjRoundTotal = conjRoundQueue.length;
+    conjRoundStarted = true;
+    key = conjRoundQueue.shift();
+  }
+  conjRoundCurKey = key;
+  renderConj(map.get(key), rand(forms).id);
+  updateConjProgress();
+}
+// 상단 진행 표시: 이번 라운드 남은 개수(현재 문제 포함) / 전체
+function updateConjProgress() {
+  const el = document.getElementById('conj-progress');
+  if (!el) return;
+  if (conjReviewMode || !conjRoundTotal || !conjCur.verb) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.textContent = `📚 이번 라운드 남은 ${conjRoundQueue.length + 1} / 전체 ${conjRoundTotal}개`;
+}
+// 일반 라운드에서 틀리면: 이번 라운드 큐 뒤에 다시 넣어 맞힐 때까지 재출제
+function handleConjRoundWrong() {
+  if (conjRoundCurKey && !conjRoundQueue.includes(conjRoundCurKey)) conjRoundQueue.push(conjRoundCurKey);
 }
 
 function renderConj(verb, fid) {
@@ -2169,7 +2238,7 @@ function checkConjAnswer() {
     conjStats.wrongMap[ckey(verb,fid)] = (conjStats.wrongMap[ckey(verb,fid)] || { k:verb.dict.k, h:verb.dict.h, cnt:0 });
     conjStats.wrongMap[ckey(verb,fid)].cnt++;
     addConjWrong(verb, fid);
-    if (conjReviewMode) handleConjReviewWrong();
+    if (conjReviewMode) handleConjReviewWrong(); else handleConjRoundWrong();
     inp.className='answer-input wrong';
     rc.className='result-card wrong';
     document.getElementById('conj-result-title').className='result-title wrong';
@@ -2242,6 +2311,7 @@ function startConjReview() {
   conjReviewMode = true;
   closeModal('modal-conj-review');
   document.getElementById('conj-review-banner').classList.add('on');
+  document.getElementById('conj-progress').style.display = 'none';   // 복습 중엔 라운드 진행 표시 숨김
   newConjQuestion();
 }
 function newConjReviewQuestion() {
