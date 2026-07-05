@@ -795,6 +795,7 @@ const CONJ_FORMS = [
   { id:'proh', label:'금지형 (기본형+な)',    nuance:'~하지 마라' },
   { id:'pass', label:'수동형 (~れる·られる)', nuance:'~당하다 / ~받다' },
   { id:'caus', label:'사역형 (~せる·させる)', nuance:'~하게 하다 / 시키다' },
+  { id:'desidneg', label:'희망 부정형 (~たくない)', nuance:'~하고 싶지 않다' },
 ];
 const E_ROW = {'う':'え','く':'け','ぐ':'げ','す':'せ','つ':'て','ぬ':'ね','ぶ':'べ','む':'め','る':'れ'};
 const O_ROW = {'う':'お','く':'こ','ぐ':'ご','す':'そ','つ':'と','ぬ':'の','ぶ':'ぼ','む':'も','る':'ろ'};
@@ -807,6 +808,9 @@ function conjForm(verb, id) {
   if (id === 'ta')   return verb.ta;
   if (id === 'te')   return verb.te;
   if (id === 'proh') return { k: verb.dict.k + 'な', h: verb.dict.h + 'な' };
+  if (id === 'desidneg') { // 희망 부정형: ます형 어간(연용형) + たくない
+    return { k: verb.masu.k.slice(0,-2) + 'たくない', h: verb.masu.h.slice(0,-2) + 'たくない' };
+  }
   const dk = verb.dict.k, dh = verb.dict.h, g = verb.group;
   if (g === 3) {
     if (dh.endsWith('する')) {
@@ -953,6 +957,15 @@ function migrateReviewWordLevel(obj) {
 // 연습할 활용형 설정 (기본: 전체)
 let conjSettings = CONJ_FORMS.map(f => f.id);
 try { const s = JSON.parse(localStorage.getItem('jp_conj_forms') || 'null'); if (s && s.length) conjSettings = s; } catch(e) {}
+// 새로 추가된 활용형은 기본 on (사용자가 직접 끈 항목과 구분해 1회만 추가)
+try {
+  const allIds = CONJ_FORMS.map(f => f.id);
+  const known = JSON.parse(localStorage.getItem('jp_conj_known') || 'null') || allIds.filter(id => id !== 'desidneg');
+  let changed = false;
+  for (const id of allIds) if (!known.includes(id) && !conjSettings.includes(id)) { conjSettings.push(id); changed = true; }
+  if (changed) localStorage.setItem('jp_conj_forms', JSON.stringify(conjSettings));
+  localStorage.setItem('jp_conj_known', JSON.stringify(allIds));
+} catch(e) {}
 
 let conjCur = {};
 
