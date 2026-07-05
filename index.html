@@ -1752,9 +1752,15 @@ function toggleStar(v) {
     : [[memoReview, saveMemoReview]];
   targets.forEach(([L, save]) => {
     if (on) { if (L[key]) L[key].m = true; else L[key] = { v, w: 0, m: true }; }
-    else if (L[key]) { L[key].m = false; if (L[key].w === 0) delete L[key]; }  // 오답 기록 있으면 유지
+    else if (L[key]) delete L[key];   // ⭐ 해제 = 복습 목록에서 완전히 제거(오답 기록 포함)
     save();
   });
+  // 복습 큐에서도 즉시 제거(진행 중 세션 반영)
+  if (!on) {
+    reviewQueue = reviewQueue.filter(x => x !== key);
+    conjReviewQueue = conjReviewQueue.filter(x => x !== key);
+    memoReviewQueue = memoReviewQueue.filter(x => x !== key);
+  }
   updateReviewBadge();
 }
 
