@@ -1040,6 +1040,17 @@ if (!localStorage.getItem('jp_star_sync_v2')) {
   saveMemoReview(); saveReview(); saveConjReview();
   localStorage.setItem('jp_star_sync_v2', '1');
 }
+
+// 유령 항목 1회 정리: 삭제·전환된 단어의 복습 항목(현재 목록에 없는 키)을 제거
+// (예전 삭제/전환 시 복습 정리를 안 해 남은 중복·유령 → 개수 불일치 원인 해소)
+if (!localStorage.getItem('jp_review_prune_v1')) {
+  const validKeys = new Set([...allVerbs(), ...vocab].map(vkey));
+  for (const L of [memoReview, review, conjReview]) {
+    for (const k of Object.keys(L)) if (!validKeys.has(k)) delete L[k];
+  }
+  saveMemoReview(); saveReview(); saveConjReview();
+  localStorage.setItem('jp_review_prune_v1', '1');
+}
 // 암기 전용 출제 제외(off) 집합 (te/conj의 disabledVerbs와 완전 별개)
 // 암기 출제 풀 = 숨김 아닌 모든 동사 + 표현 (중심 데이터)
 function memoItems() { return [...allVerbs(), ...vocab].filter(it => !hidden.has(vkey(it))); }
@@ -1550,9 +1561,23 @@ function convertVocabToVerb(key) {
   }
   if (allVerbs().some(x => x.dict.k === c.dict.k)) { alert('이미 동사 목록에 있어요.'); return; }
   if (!confirm(`'${c.dict.k}'을(를) 동사로 전환할까요?\n(${GROUP_NAME[c.group]} · て형 ${c.te.h} · 활용/て형 연습에 사용 가능)\n※ 그룹이 틀리면 전환 후 다시 확인해 주세요.`)) return;
-  customVerbs.push({ dict:c.dict, masu:c.masu, nai:c.nai, ta:c.ta, te:c.te, meaning:v.meaning, group:c.group, custom:true, ...(v.exJp && { exJp:v.exJp }), ...(v.exKo && { exKo:v.exKo }) });
+  const newVerb = { dict:c.dict, masu:c.masu, nai:c.nai, ta:c.ta, te:c.te, meaning:v.meaning, group:c.group, custom:true, ...(v.exJp && { exJp:v.exJp }), ...(v.exKo && { exKo:v.exKo }) };
+  customVerbs.push(newVerb);
   localStorage.setItem('jp_custom_verbs', JSON.stringify(customVerbs));
   vocab.splice(i, 1); saveVocab();
+  // 복습 항목 키 이전: 옛 표현 키(예 うたう) → 새 동사 키(歌う). 별표였으면 동사이므로 세 복습 모두로
+  const oldKey = key, newKey = c.dict.k;
+  if (oldKey !== newKey && memoReview[oldKey]) {
+    const e = memoReview[oldKey]; delete memoReview[oldKey];
+    if (!memoReview[newKey]) memoReview[newKey] = { v: newVerb, w: e.w, m: e.m };
+    if (e.m) {
+      if (!review[newKey])     review[newKey]     = { v: newVerb, w: 0, m: true };
+      if (!conjReview[newKey]) conjReview[newKey] = { v: newVerb, w: 0, m: true };
+    }
+    saveMemoReview(); saveReview(); saveConjReview();
+    memoReviewQueue = memoReviewQueue.filter(x => x !== oldKey);
+    updateReviewBadge();
+  }
   vocabDirty = true; verbSetDirty = true;
   renderVocabList();
   alert(`"${c.dict.k}" 동사로 전환 완료! 활용 체크박스가 생겼어요.`);
@@ -1610,6 +1635,7 @@ function deleteMemoItem(kind, key) {
     vocab.splice(i, 1);
     saveVocab();
   }
+  purgeFromReviews(key);   // 삭제한 단어를 복습 목록에서도 제거(유령 항목 방지)
   vocabDirty = true;
   renderVocabList(); renderHiddenList();
 }
@@ -1768,6 +1794,16 @@ function toggleBookmark() {
   if (!cur.verb) return;
   toggleStar(cur.verb);
   updateBookmarkBtn();
+}
+
+// 특정 단어 키를 모든 복습 목록·큐에서 제거 (단어 삭제 시 유령 항목 방지)
+function purgeFromReviews(key) {
+  delete memoReview[key]; delete review[key]; delete conjReview[key];
+  saveMemoReview(); saveReview(); saveConjReview();
+  memoReviewQueue = memoReviewQueue.filter(x => x !== key);
+  reviewQueue     = reviewQueue.filter(x => x !== key);
+  conjReviewQueue = conjReviewQueue.filter(x => x !== key);
+  updateReviewBadge();
 }
 
 // 복습 모드에서 정답 시: 태깅 안 된 오답 단어는 마스터 처리(목록에서 제거)
