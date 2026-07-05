@@ -1760,8 +1760,8 @@ function updateBookmarkBtn() {
 // 오답 시 자동으로 복습 컬렉션에 추가 (단어 단위, 오답 횟수 누적)
 function addWrong(verb, target) {
   const k = vkey(verb);
-  if (!review[k]) review[k] = { v: verb, w: 0, m: false };
-  review[k].w++;
+  if (!review[k]) review[k] = { v: verb, w: 1, m: false };
+  else review[k].w = 1;   // 오답 표시(횟수 누적 안 함)
   saveReview();
   updateReviewBadge();
 }
@@ -1845,7 +1845,7 @@ function renderReviewList() {
   list.innerHTML = rows.map(r => {
     const v = r.v;
     const tags = [];
-    if (r.w) tags.push(`<span class="rv-tag-wrong">❌ ${r.w}회</span>`);
+    if (r.w) tags.push(`<span class="rv-tag-wrong">❌ 오답</span>`);
     if (r.m) tags.push(`<span class="rv-tag-mark">⭐ 저장</span>`);
     return `<div class="review-row">
       <div>
@@ -2088,7 +2088,7 @@ function memoSelfCorrect() {
   const vs = verbStats[vkey(verb)];
   if (vs) { vs.wrong = Math.max(0, vs.wrong - 1); vs.correct++; saveVerbStats(); }
   const it = memoReview[vkey(verb)];
-  if (it) { it.w = Math.max(0, it.w - 1); if (it.w === 0 && !it.m) delete memoReview[vkey(verb)]; saveMemoReview(); }
+  if (it) { if (it.m) it.w = 0; else delete memoReview[vkey(verb)]; saveMemoReview(); }   // 맞으면 오답 항목 제거(별표면 유지)
   if (memoReviewMode) handleMemoReviewCorrect();
   else memoRoundQueue = memoRoundQueue.filter(k => k !== memoRoundCurKey); // 정답 처리 → 라운드에서 다시 안 나오게
   const rc = document.getElementById('memo-result');
@@ -2115,8 +2115,8 @@ function updateMemoBookmarkBtn() {
 }
 function addMemoWrong(verb) {
   const h = vkey(verb);
-  if (!memoReview[h]) memoReview[h] = { v:verb, w:0, m:false };
-  memoReview[h].w++;
+  if (!memoReview[h]) memoReview[h] = { v:verb, w:1, m:false };
+  else memoReview[h].w = 1;   // 오답 표시(횟수 누적 안 함)
   saveMemoReview(); updateReviewBadge();
 }
 function toggleMemoBookmark() {
@@ -2149,7 +2149,7 @@ function renderMemoReviewList() {
   startBtn.style.display='';
   const rows = keys.map(k => ({ k, ...memoReview[k] })).sort((a,b) => (b.w - a.w) || (b.m - a.m));
   list.innerHTML = rows.map(r => {
-    const tags=[]; if (r.w) tags.push(`<span class="rv-tag-wrong">❌ ${r.w}회</span>`); if (r.m) tags.push(`<span class="rv-tag-mark">⭐ 저장</span>`);
+    const tags=[]; if (r.w) tags.push(`<span class="rv-tag-wrong">❌ 오답</span>`); if (r.m) tags.push(`<span class="rv-tag-mark">⭐ 저장</span>`);
     return `<div class="review-row"><div>
       <div class="rv-main">${ruby(r.v.dict.k, r.v.dict.h)} <span style="color:#888;font-weight:400">${r.v.meaning}</span></div>
       <div class="rv-sub">${tags.join(' &nbsp; ')}</div>
@@ -2316,8 +2316,8 @@ function updateConjBookmarkBtn() {
 }
 function addConjWrong(verb, fid) {
   const k = vkey(verb);
-  if (!conjReview[k]) conjReview[k] = { v:verb, w:0, m:false };
-  conjReview[k].w++;
+  if (!conjReview[k]) conjReview[k] = { v:verb, w:1, m:false };
+  else conjReview[k].w = 1;   // 오답 표시(횟수 누적 안 함)
   saveConjReview(); updateReviewBadge();
 }
 function toggleConjBookmark() {
@@ -2350,7 +2350,7 @@ function renderConjReviewList() {
   startBtn.style.display='';
   const rows = keys.map(k => ({ k, ...conjReview[k] })).sort((a,b) => (b.w - a.w) || (b.m - a.m));
   list.innerHTML = rows.map(r => {
-    const tags=[]; if (r.w) tags.push(`<span class="rv-tag-wrong">❌ ${r.w}회</span>`); if (r.m) tags.push(`<span class="rv-tag-mark">⭐ 저장</span>`);
+    const tags=[]; if (r.w) tags.push(`<span class="rv-tag-wrong">❌ 오답</span>`); if (r.m) tags.push(`<span class="rv-tag-mark">⭐ 저장</span>`);
     return `<div class="review-row"><div>
       <div class="rv-main">${ruby(r.v.dict.k, r.v.dict.h)} <span style="color:#888;font-weight:400">${r.v.meaning}</span></div>
       <div class="rv-sub">🎲 활용 랜덤 출제 &nbsp;·&nbsp; ${tags.join(' &nbsp; ')}</div>
