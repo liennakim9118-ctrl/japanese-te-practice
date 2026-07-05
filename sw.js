@@ -1,5 +1,5 @@
 // 오프라인 캐시: 앱 셸은 network-first(최신 유지), 사전은 cache-first(용량↑·변화 적음)
-const CACHE = 'jp-te-v4';
+const CACHE = 'jp-te-v5';
 const ASSETS = ['./', './index.html', './dict.js', './manifest.json'];
 
 self.addEventListener('install', e => {
@@ -24,8 +24,9 @@ self.addEventListener('fetch', e => {
       }))
     );
   } else {
+    // 앱 셸: 항상 네트워크에서 최신을 가져옴(HTTP 캐시 우회) → 배포 즉시 반영
     e.respondWith(
-      fetch(e.request).then(resp => {
+      fetch(e.request, { cache: 'no-store' }).then(resp => {
         const c = resp.clone(); caches.open(CACHE).then(x => x.put(e.request, c)); return resp;
       }).catch(() => caches.match(e.request).then(r => r || caches.match('./index.html')))
     );
