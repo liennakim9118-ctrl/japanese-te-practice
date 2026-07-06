@@ -1,7 +1,7 @@
 {
-  "name": "て형 연습",
-  "short_name": "て형 연습",
-  "description": "일본어 て형 파생 표현 학습 앱",
+  "name": "일본어 연습",
+  "short_name": "일본어 연습",
+  "description": "일본어 동사 암기·활용·표현 연습 앱",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f0f4f8",

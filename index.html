@@ -7,10 +7,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="て형 연습">
+<meta name="apple-mobile-web-app-title" content="일본어 연습">
 <link rel="manifest" href="manifest.json">
 <script defer src="dict.js"></script>
-<title>일본어 て형 연습</title>
+<title>일본어 연습</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
@@ -413,7 +413,7 @@ ruby rt {
 <body>
 
 <div class="header">
-  <h1>🇯🇵 て형 연습</h1>
+  <h1>🇯🇵 일본어 연습</h1>
   <div class="score-display" id="score-display">정답: 0 / 0</div>
 </div>
 
@@ -423,10 +423,11 @@ ruby rt {
   <div class="mode-tabs">
     <button class="mode-tab active" id="tab-memo" onclick="setMode('memo')">암기</button>
     <button class="mode-tab" id="tab-conj" onclick="setMode('conj')">활용</button>
-    <button class="mode-tab" id="tab-te" onclick="setMode('te')">て형</button>
+    <button class="mode-tab" id="tab-te" onclick="setMode('te')">표현</button>
+    <button class="mode-tab" id="tab-mix" onclick="setMode('mix')">섞어서</button>
   </div>
 
-  <!-- ===== て형 연습 뷰 ===== -->
+  <!-- ===== 표현(て형 파생) 연습 뷰 ===== -->
   <div id="te-view" style="display:none">
 
   <!-- Review mode banner -->
@@ -441,7 +442,7 @@ ruby rt {
   <!-- Problem Card -->
   <div class="card" id="problem-card">
     <div class="card-top">
-      <span class="form-badge" id="given-form-label">기본형</span>
+      <span class="form-badge" id="given-form-label">て형</span>
       <button class="bookmark-btn" id="bookmark-btn" onclick="toggleBookmark()" title="복습 목록에 저장">🔖</button>
     </div>
     <div class="verb-display" id="verb-display"></div>
@@ -537,6 +538,33 @@ ruby rt {
     <button class="next-btn" id="conj-next" style="display:none">다음 문제 →</button>
 
   </div><!-- /conj-view -->
+
+  <!-- ===== 섞어서(활용+표현 통합) 뷰 ===== -->
+  <div id="mix-view" style="display:none">
+
+    <div style="text-align:center;font-size:12px;color:#3b5bdb;font-weight:700;margin:2px 0 8px">🎲 활용 + 표현 섞어서 (기본형 → 최종형)</div>
+
+    <div class="card" id="mix-card">
+      <div class="card-top">
+        <span class="form-badge" id="mix-form-label">섞어서</span>
+      </div>
+      <div class="verb-display" id="mix-display"></div>
+      <div class="question-text" id="mix-question"></div>
+      <div class="input-row">
+        <input type="text" class="answer-input" id="mix-input"
+          placeholder="ひらがな 또는 한자..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <button class="submit-btn" id="mix-submit">확인</button>
+      </div>
+    </div>
+
+    <div class="result-card" id="mix-result">
+      <div class="result-title" id="mix-result-title"></div>
+      <div id="mix-result-body"></div>
+    </div>
+
+    <button class="next-btn" id="mix-next" style="display:none">다음 문제 →</button>
+
+  </div><!-- /mix-view -->
 
   <!-- Bottom bar -->
   <div class="bottom-bar">
@@ -662,10 +690,8 @@ ruby rt {
 <div class="modal-overlay" id="modal-settings">
   <div class="modal">
     <h2>⚙️ 설정</h2>
-    <div class="section-title">연습할 파생 표현</div>
+    <div class="section-title">표현 연습 (연습할 て형 파생 표현)</div>
     <div id="deriv-checks"></div>
-    <div class="section-title">주어진 형태 (문제 제시 방식)</div>
-    <div id="given-checks"></div>
     <div class="section-title">암기 연습</div>
     <label class="check-label">
       <input type="checkbox" id="memo-bidir-check">
@@ -673,6 +699,7 @@ ruby rt {
     </label>
     <div class="section-title">활용 연습 (연습할 활용형)</div>
     <div id="conj-checks"></div>
+    <div style="font-size:11px;color:#aaa;margin:-4px 0 10px;line-height:1.6">🎲 <b>섞어서</b> 탭은 위에서 켠 <b>활용형 + 표현</b>을 한 풀로 합쳐 출제해요.</div>
     <div class="section-title">🙈 숨김 목록 (복원·삭제)</div>
     <div id="hidden-list"></div>
     <div style="font-size:11px;color:#aaa;margin-top:16px;line-height:1.6">
@@ -688,7 +715,7 @@ ruby rt {
 <!-- ───── Review Modal (て형) ───── -->
 <div class="modal-overlay" id="modal-review">
   <div class="modal">
-    <h2>🔖 て형 복습 목록</h2>
+    <h2>🔖 표현 복습 목록</h2>
     <div id="review-list"></div>
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeModal('modal-review')">닫기</button>
@@ -774,14 +801,6 @@ const DERIVATIVES = [
   { id:'te_oku',        suffix:'おく',      label:'ておく',      meaning:'~해 두다',          expl: te => `て형(${te}) + <b>おく</b> → 준비 표현 "미리 ~해 두다"` },
 ];
 
-const GIVEN_FORMS = [
-  { id:'dict',  label:'기본형', desc:'~한다' },
-  { id:'masu',  label:'ます형', desc:'~합니다' },
-  { id:'nai',   label:'ない형', desc:'~하지 않는다' },
-  { id:'ta',    label:'た형',   desc:'~했다' },
-  { id:'deriv', label:'て파생형' },
-];
-
 // 활용 연습(기본 활용) — 뜻 뉘앙스로 출제, 정답에서 활용형 이름 공개
 const CONJ_FORMS = [
   { id:'masu', label:'정중형 (ます형)', nuance:'~합니다 (정중하게)' },
@@ -848,7 +867,7 @@ const conjLabel = id => { const f = CONJ_FORMS.find(x=>x.id===id); return f ? f.
 let customVerbs = [];
 try { customVerbs = JSON.parse(localStorage.getItem('jp_custom_verbs') || '[]'); } catch(e) {}
 
-let settings = { derivs: DERIVATIVES.map(d=>d.id), givens: GIVEN_FORMS.map(f=>f.id) };
+let settings = { derivs: DERIVATIVES.map(d=>d.id) };
 try {
   const saved = JSON.parse(localStorage.getItem('jp_settings') || 'null');
   if (saved) settings = saved;
@@ -938,6 +957,13 @@ let conjReviewMode = false, conjReviewQueue = [];
 // 활용 일반 연습 라운드: 전체 동사를 한 바퀴씩, 오답은 맞힐 때까지 반복
 let conjRoundQueue = [], conjRoundTotal = 0, conjRoundCurKey = null, conjRoundStarted = false, conjRoundSig = '';
 const ckey = (verb, fid) => verb.dict.k + '|' + fid;
+
+// ── 섞어서(활용+표현 통합) 상태 ──
+let mixStats = { date: kstDateStr(), total:0, correct:0, streak:0, wrongMap:{} };
+try { const s = JSON.parse(localStorage.getItem('jp_mix_stats') || 'null'); if (s && s.date === kstDateStr()) mixStats = s; } catch(e) {}
+function saveMixStats() { localStorage.setItem('jp_mix_stats', JSON.stringify(mixStats)); }
+function rolloverMixStats() { if (mixStats.date !== kstDateStr()) { mixStats = { date: kstDateStr(), total:0, correct:0, streak:0, wrongMap:{} }; saveMixStats(); } }
+let mixCur = {};
 
 // 구버전(동사+형태별) 복습 데이터를 단어 단위로 통합 마이그레이션
 function migrateReviewWordLevel(obj) {
@@ -1092,29 +1118,14 @@ function newQuestion() {
   const verb = map.get(rkeyPick);
 
   const enabledD = DERIVATIVES.filter(d => settings.derivs.includes(d.id));
-  const enabledG = GIVEN_FORMS .filter(f => settings.givens.includes(f.id));
-  if (!enabledD.length || !enabledG.length) return;
+  if (!enabledD.length) return;
 
-  const target    = rand(enabledD);
-  const givenType = rand(enabledG);
+  const target = rand(enabledD);
 
-  let givenKanji, givenKana, givenLabel;
-
-  if (givenType.id === 'deriv') {
-    const others = enabledD.filter(d => d.id !== target.id);
-    const src = others.length ? rand(others) : null;
-    if (src) {
-      givenKanji = verb.te.k + src.suffix;
-      givenKana  = verb.te.h + src.suffix;
-      givenLabel = `${src.label}형 (${src.meaning})`;
-    } else {
-      givenKanji = verb.dict.k; givenKana = verb.dict.h; givenLabel = '기본형 (~한다)';
-    }
-  } else {
-    givenKanji = verb[givenType.id].k;
-    givenKana  = verb[givenType.id].h;
-    givenLabel = givenType.desc ? `${givenType.label} (${givenType.desc})` : givenType.label;
-  }
+  // 표현 탭: て형은 이미 안다고 전제 → 항상 て형을 제시하고, 그 위에 파생 표현만 붙이는 연습
+  const givenKanji = verb.te.k;
+  const givenKana  = verb.te.h;
+  const givenLabel = 'て형 (~하고 / ~해서)';
 
   cur = { verb, target };
 
@@ -1122,8 +1133,8 @@ function newQuestion() {
   document.getElementById('given-form-label').textContent = givenLabel;
   document.getElementById('verb-display').innerHTML = ruby(givenKanji, givenKana);
   document.getElementById('question-text').innerHTML =
-    `<b>${verb.meaning}</b>을(를) 뜻하는 동사를<br>` +
-    `<span class="target-badge">${target.label} &nbsp;(${target.meaning})</span>&nbsp; 으로 변환하세요.`;
+    `<b>${verb.meaning}</b> — 위 て형에 붙여<br>` +
+    `<span class="target-badge">${target.label} &nbsp;(${target.meaning})</span>&nbsp; 을(를) 만들어 보세요.`;
 
   // Reset UI
   const inp = document.getElementById('answer-input');
@@ -1642,7 +1653,7 @@ function deleteMemoItem(kind, key) {
 
 // ── Stats (현재 모드 기준) ──
 function openStats() {
-  appMode === 'memo' ? rolloverMemoStats() : appMode === 'conj' ? rolloverConjStats() : rolloverStats();
+  appMode === 'memo' ? rolloverMemoStats() : appMode === 'conj' ? rolloverConjStats() : appMode === 'mix' ? rolloverMixStats() : rolloverStats();
   const s = activeStats();
   document.getElementById('st-total').textContent   = s.total;
   document.getElementById('st-correct').textContent = s.correct;
@@ -1653,7 +1664,7 @@ function openStats() {
     .map(([key,v]) => ({ h: v.h || key, k: v.k, cnt: v.cnt }))
     .sort((a,b) => b.cnt - a.cnt).slice(0,5);
 
-  const modeLabel = appMode === 'memo' ? '암기' : appMode === 'conj' ? '활용' : 'て형';
+  const modeLabel = appMode === 'memo' ? '암기' : appMode === 'conj' ? '활용' : appMode === 'mix' ? '섞어서' : '표현';
   document.getElementById('wrong-list').innerHTML = wrongs.length
     ? `<div style="font-size:12px;color:#888;margin-bottom:8px;font-weight:600">자주 틀리는 동사 TOP 5 (${modeLabel})</div>` +
       wrongs.map(w =>
@@ -1665,11 +1676,12 @@ function openStats() {
 }
 
 function resetStats() {
-  const modeLabel = appMode === 'memo' ? '암기' : appMode === 'conj' ? '활용' : 'て형';
+  const modeLabel = appMode === 'memo' ? '암기' : appMode === 'conj' ? '활용' : appMode === 'mix' ? '섞어서' : '표현';
   if (!confirm(`오늘 ${modeLabel} 통계를 초기화하시겠습니까?`)) return;
   const fresh = { date: kstDateStr(), total:0, correct:0, streak:0, wrongMap:{} };
   if (appMode === 'memo') { memoStats = fresh; saveMemoStats(); }
   else if (appMode === 'conj') { conjStats = fresh; saveConjStats(); }
+  else if (appMode === 'mix') { mixStats = fresh; saveMixStats(); }
   else { stats = fresh; saveStats(); }
   updateScoreDisplay();
   closeModal('modal-stats');
@@ -1681,13 +1693,6 @@ function openSettings() {
     `<label class="check-label">
       <input type="checkbox" value="${d.id}" ${settings.derivs.includes(d.id)?'checked':''}>
       <span><b>${d.label}</b> <span class="check-sub">${d.meaning}</span></span>
-    </label>`
-  ).join('');
-
-  document.getElementById('given-checks').innerHTML = GIVEN_FORMS.map(f =>
-    `<label class="check-label">
-      <input type="checkbox" value="${f.id}" ${settings.givens.includes(f.id)?'checked':''}>
-      <span>${f.label}</span>
     </label>`
   ).join('');
 
@@ -1706,10 +1711,8 @@ function openSettings() {
 
 function saveSettings() {
   const dc = [...document.querySelectorAll('#deriv-checks input:checked')].map(c=>c.value);
-  const gc = [...document.querySelectorAll('#given-checks input:checked')].map(c=>c.value);
-  if (!dc.length) { alert('파생 표현을 최소 1개 선택하세요.'); return; }
-  if (!gc.length) { alert('주어진 형태를 최소 1개 선택하세요.'); return; }
-  settings = { derivs:dc, givens:gc };
+  if (!dc.length) { alert('표현(파생) 항목을 최소 1개 선택하세요.'); return; }
+  settings = { derivs:dc };
   localStorage.setItem('jp_settings', JSON.stringify(settings));
   memoBidir = document.getElementById('memo-bidir-check').checked;
   localStorage.setItem('jp_memo_bidir', JSON.stringify(memoBidir));
@@ -1720,7 +1723,7 @@ function saveSettings() {
   localStorage.setItem('jp_conj_forms', JSON.stringify(conjSettings));
 
   closeModal('modal-settings');
-  appMode === 'memo' ? newMemoQuestion() : appMode === 'conj' ? newConjQuestion() : newQuestion();
+  appMode === 'memo' ? newMemoQuestion() : appMode === 'conj' ? newConjQuestion() : appMode === 'mix' ? newMixQuestion() : newQuestion();
 }
 
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
@@ -1730,8 +1733,8 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 // ═══════════════════════════════════════════════════
 const targetLabel = tid => { const d = DERIVATIVES.find(x=>x.id===tid); return d ? d.label : tid; };
 
-function activeStats() { return appMode === 'memo' ? memoStats : appMode === 'conj' ? conjStats : stats; }
-function activeReview() { return appMode === 'memo' ? memoReview : appMode === 'conj' ? conjReview : review; }
+function activeStats() { return appMode === 'memo' ? memoStats : appMode === 'conj' ? conjStats : appMode === 'mix' ? mixStats : stats; }
+function activeReview() { return appMode === 'mix' ? {} : appMode === 'memo' ? memoReview : appMode === 'conj' ? conjReview : review; }
 
 function updateReviewBadge() {
   const n = Object.keys(activeReview()).length;
@@ -1746,7 +1749,10 @@ function updateScoreDisplay() {
 }
 
 // 복습 버튼: 현재 모드에 맞는 복습 목록 열기
-function openReviewByMode() { appMode === 'memo' ? openMemoReview() : appMode === 'conj' ? openConjReview() : openReview(); }
+function openReviewByMode() {
+  if (appMode === 'mix') { alert('섞어서 모드는 별도 복습 목록이 없어요.\n활용·표현 탭에서 각각 복습하세요.'); return; }
+  appMode === 'memo' ? openMemoReview() : appMode === 'conj' ? openConjReview() : openReview();
+}
 
 function updateBookmarkBtn() {
   const btn = document.getElementById('bookmark-btn');
@@ -1888,15 +1894,16 @@ function newReviewQuestion() {
 
   const it = review[k];
   const verb = it.v;
-  const target = rand(DERIVATIVES);   // 단어 단위 저장 → 매 출제마다 て파생 랜덤 선택
+  const enabledD = DERIVATIVES.filter(d => settings.derivs.includes(d.id));
+  const target = rand(enabledD.length ? enabledD : DERIVATIVES);   // 단어 단위 저장 → 매 출제마다 て파생 랜덤 선택
   cur = { verb, target };
 
   document.getElementById('review-banner-text').textContent = `🔖 복습 모드 · 남은 문제 ${reviewQueue.length + 1}개`;
-  document.getElementById('given-form-label').textContent = '기본형 (~한다)';
-  document.getElementById('verb-display').innerHTML = ruby(verb.dict.k, verb.dict.h);
+  document.getElementById('given-form-label').textContent = 'て형 (~하고 / ~해서)';
+  document.getElementById('verb-display').innerHTML = ruby(verb.te.k, verb.te.h);
   document.getElementById('question-text').innerHTML =
-    `<b>${verb.meaning}</b>을(를) 뜻하는 동사를<br>` +
-    `<span class="target-badge">${target.label} &nbsp;(${target.meaning})</span>&nbsp; 으로 변환하세요.`;
+    `<b>${verb.meaning}</b> — 위 て형에 붙여<br>` +
+    `<span class="target-badge">${target.label} &nbsp;(${target.meaning})</span>&nbsp; 을(를) 만들어 보세요.`;
 
   const inp = document.getElementById('answer-input');
   inp.value = ''; inp.className = 'answer-input'; inp.disabled = false;
@@ -1925,7 +1932,7 @@ function exitReview(completed) {
 function setMode(m) {
   if (appMode === m) return;
   appMode = m;
-  ['te','memo','conj'].forEach(x => {
+  ['te','memo','conj','mix'].forEach(x => {
     document.getElementById('tab-' + x).classList.toggle('active', m === x);
     document.getElementById(x + '-view').style.display = (m === x) ? '' : 'none';
   });
@@ -1934,6 +1941,7 @@ function setMode(m) {
   document.getElementById('add-btn').textContent = (m === 'memo') ? '＋ 표현' : '＋ 동사';
   if (m === 'memo')      { if (!memoCur.verb) newMemoQuestion(); }
   else if (m === 'conj') { if (!conjCur.verb) newConjQuestion(); }
+  else if (m === 'mix')  { if (!mixCur.verb)  newMixQuestion(); }
   else                   { if (!cur.verb)     newQuestion(); }
 }
 function openAddByMode() { appMode === 'memo' ? openVocab() : openAddVerb(); }
@@ -2391,6 +2399,99 @@ function exitConjReview(completed) {
   newConjQuestion();
 }
 
+// ═══════════════════════════════════════════════════
+// MIX (섞어서: 활용 12형 + 표현 8종 통합 출제)
+// ═══════════════════════════════════════════════════
+// 설정에서 켜둔 활용형(conjSettings) + 표현(settings.derivs)을 한 풀로 합쳐 랜덤 출제.
+// 주어진 형태는 항상 기본형 → 학습자가 최종형까지 스스로 만들어 통합 훈련.
+function mixTargets() {
+  const conj = CONJ_FORMS.filter(f => conjSettings.includes(f.id))
+    .map(f => ({ kind:'conj', id:f.id, label:f.label, hint:f.nuance }));
+  const der = DERIVATIVES.filter(d => settings.derivs.includes(d.id))
+    .map(d => ({ kind:'deriv', id:d.id, label:d.label, hint:d.meaning, suffix:d.suffix, expl:d.expl }));
+  return conj.concat(der);
+}
+function mixAnswer(verb, t) {
+  return t.kind === 'conj' ? conjForm(verb, t.id) : { k: verb.te.k + t.suffix, h: verb.te.h + t.suffix };
+}
+function newMixQuestion() {
+  rolloverMixStats();
+  const pool = quizVerbs();
+  const targets = mixTargets();
+  if (!pool.length) { mixCur = {}; mixEmpty(); return; }
+  if (!targets.length) { mixCur = {}; mixEmpty('설정에서 활용형·표현을 최소 1개 이상 켜주세요.'); return; }
+  renderMix(rand(pool), rand(targets));
+}
+function renderMix(verb, target) {
+  mixCur = { verb, target };
+  document.getElementById('mix-form-label').textContent = target.kind === 'conj' ? '활용 만들기' : '표현 만들기';
+  document.getElementById('mix-display').innerHTML = ruby(verb.dict.k, verb.dict.h);
+  document.getElementById('mix-question').innerHTML =
+    `<b>${verb.meaning}</b> 를 아래 형태로 만들어 보세요.<br>` +
+    `<span class="target-badge">${target.label} &nbsp;(${target.hint})</span>`;
+  const inp = document.getElementById('mix-input');
+  inp.value=''; inp.className='answer-input'; inp.disabled=false;
+  document.getElementById('mix-result').style.display='none';
+  document.getElementById('mix-result').className='result-card';
+  document.getElementById('mix-next').style.display='none';
+  document.getElementById('mix-submit').style.display='';
+  inp.focus();
+}
+function mixEmpty(msg) {
+  mixCur = {};
+  document.getElementById('mix-form-label').textContent='안내';
+  document.getElementById('mix-display').innerHTML='🚫';
+  document.getElementById('mix-question').innerHTML = msg || '출제할 동사가 없어요. <b>＋ 동사</b>에서 체크박스를 켜주세요.';
+  const inp=document.getElementById('mix-input'); inp.value=''; inp.disabled=true;
+  document.getElementById('mix-submit').style.display='none';
+  document.getElementById('mix-next').style.display='none';
+  document.getElementById('mix-result').style.display='none';
+}
+function checkMixAnswer() {
+  const inp = document.getElementById('mix-input');
+  const user = norm(inp.value);
+  if (!user) { inp.focus(); return; }
+  const { verb, target } = mixCur;
+  const ans = mixAnswer(verb, target);
+  const ok = (user === norm(ans.h) || user === norm(ans.k));
+
+  mixStats.total++;
+  bumpVerbStat(verb, ok);
+  inp.disabled = true;
+  document.getElementById('mix-submit').style.display='none';
+  document.getElementById('mix-next').style.display='';
+
+  const rc = document.getElementById('mix-result');
+  rc.style.display='block';
+  const teDisplay = ruby(verb.te.k, verb.te.h);
+  const explHtml = target.kind === 'conj'
+    ? `${ruby(verb.dict.k, verb.dict.h)} (${verb.meaning}) 의 <b>${target.label}</b>`
+    : `${ruby(verb.dict.k, verb.dict.h)}의 て형 → <b>${teDisplay}</b><br>${target.expl(teDisplay)}`;
+  const answerHtml = `<div class="correct-answer">${ruby(ans.k, ans.h)}</div>` +
+    `<div class="explanation">${explHtml}${verb.note ? `<span class="note-warn">${verb.note}</span>` : ''}</div>`;
+
+  if (ok) {
+    mixStats.correct++; mixStats.streak++;
+    inp.className='answer-input correct';
+    rc.className='result-card correct';
+    document.getElementById('mix-result-title').className='result-title correct';
+    document.getElementById('mix-result-title').textContent='✅ 정답!';
+    document.getElementById('mix-result-body').innerHTML = answerHtml;
+  } else {
+    mixStats.streak=0;
+    mixStats.wrongMap[vkey(verb)] = (mixStats.wrongMap[vkey(verb)] || { k:verb.dict.k, h:verb.dict.h, cnt:0 });
+    mixStats.wrongMap[vkey(verb)].cnt++;
+    inp.className='answer-input wrong';
+    rc.className='result-card wrong';
+    document.getElementById('mix-result-title').className='result-title wrong';
+    document.getElementById('mix-result-title').textContent='❌ 오답';
+    document.getElementById('mix-result-body').innerHTML =
+      `<div style="font-size:12px;color:#999;margin-bottom:2px">정답</div>` + answerHtml;
+  }
+  updateScoreDisplay();
+  saveMixStats();
+}
+
 document.querySelectorAll('.modal-overlay').forEach(el => {
   el.addEventListener('click', e => {
     if (e.target !== el) return;
@@ -2413,6 +2514,10 @@ document.getElementById('memo-next').addEventListener('click', newMemoQuestion);
 document.getElementById('conj-submit').addEventListener('click', checkConjAnswer);
 document.getElementById('conj-input').addEventListener('keydown', e => { if (e.key === 'Enter') checkConjAnswer(); });
 document.getElementById('conj-next').addEventListener('click', newConjQuestion);
+
+document.getElementById('mix-submit').addEventListener('click', checkMixAnswer);
+document.getElementById('mix-input').addEventListener('keydown', e => { if (e.key === 'Enter') checkMixAnswer(); });
+document.getElementById('mix-next').addEventListener('click', newMixQuestion);
 
 document.getElementById('v-k').addEventListener('input', updateVocabPreview);
 document.getElementById('v-h').addEventListener('input', () => { vAutoH = false; });
