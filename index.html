@@ -542,7 +542,8 @@ ruby rt {
   <!-- ===== 섞어서(활용+표현 통합) 뷰 ===== -->
   <div id="mix-view" style="display:none">
 
-    <div style="text-align:center;font-size:12px;color:#3b5bdb;font-weight:700;margin:2px 0 8px">🎲 활용 + 표현 섞어서 (기본형 → 최종형)</div>
+    <div style="text-align:center;font-size:12px;color:#3b5bdb;font-weight:700;margin:2px 0 2px">🎲 활용 + 표현 섞어서 (기본형 → 최종형)</div>
+    <div id="mix-progress" style="display:none;text-align:center;font-size:12px;color:#3b5bdb;font-weight:700;margin:2px 0 8px"></div>
 
     <div class="card" id="mix-card">
       <div class="card-top">
@@ -964,6 +965,8 @@ try { const s = JSON.parse(localStorage.getItem('jp_mix_stats') || 'null'); if (
 function saveMixStats() { localStorage.setItem('jp_mix_stats', JSON.stringify(mixStats)); }
 function rolloverMixStats() { if (mixStats.date !== kstDateStr()) { mixStats = { date: kstDateStr(), total:0, correct:0, streak:0, wrongMap:{} }; saveMixStats(); } }
 let mixCur = {};
+// 섞어서 일반 연습 라운드: 전체 동사를 한 바퀴씩, 오답은 맞힐 때까지 반복
+let mixRoundQueue = [], mixRoundTotal = 0, mixRoundCurKey = null, mixRoundStarted = false, mixRoundSig = '';
 
 // 구버전(동사+형태별) 복습 데이터를 단어 단위로 통합 마이그레이션
 function migrateReviewWordLevel(obj) {
@@ -2418,9 +2421,36 @@ function newMixQuestion() {
   rolloverMixStats();
   const pool = quizVerbs();
   const targets = mixTargets();
-  if (!pool.length) { mixCur = {}; mixEmpty(); return; }
-  if (!targets.length) { mixCur = {}; mixEmpty('설정에서 활용형·표현을 최소 1개 이상 켜주세요.'); return; }
-  renderMix(rand(pool), rand(targets));
+  if (!pool.length) { mixCur = {}; mixEmpty(); updateMixProgress(); return; }
+  if (!targets.length) { mixCur = {}; mixEmpty('설정에서 활용형·표현을 최소 1개 이상 켜주세요.'); updateMixProgress(); return; }
+  // 라운드: 전체 동사를 한 바퀴씩. 구성이 바뀌면 새 라운드
+  const map = new Map(pool.map(v => [vkey(v), v]));
+  const sig = [...map.keys()].join('|');
+  if (sig !== mixRoundSig) { mixRoundSig = sig; mixRoundQueue = []; mixRoundStarted = false; }
+  let key = null;
+  while (mixRoundQueue.length) { const c = mixRoundQueue.shift(); if (map.has(c)) { key = c; break; } }
+  if (!key) {
+    if (mixRoundStarted) alert(`한 바퀴 완료! 🎉 전체 ${mixRoundTotal}개 동사를 다 풀었어요.\n새 라운드를 시작합니다.`);
+    mixRoundQueue = shuffle(pool.map(vkey));
+    mixRoundTotal = mixRoundQueue.length;
+    mixRoundStarted = true;
+    key = mixRoundQueue.shift();
+  }
+  mixRoundCurKey = key;
+  renderMix(map.get(key), rand(targets));   // 동사는 라운드 순서, 목표(활용/표현)는 매번 랜덤
+  updateMixProgress();
+}
+// 상단 진행 표시: 이번 라운드 남은 개수(현재 문제 포함) / 전체
+function updateMixProgress() {
+  const el = document.getElementById('mix-progress');
+  if (!el) return;
+  if (!mixRoundTotal || !mixCur.verb) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.textContent = `📚 이번 라운드 남은 ${mixRoundQueue.length + 1} / 전체 ${mixRoundTotal}개`;
+}
+// 일반 라운드에서 틀리면: 이번 라운드 큐 뒤에 다시 넣어 맞힐 때까지 재출제
+function handleMixRoundWrong() {
+  if (mixRoundCurKey && !mixRoundQueue.includes(mixRoundCurKey)) mixRoundQueue.push(mixRoundCurKey);
 }
 function renderMix(verb, target) {
   mixCur = { verb, target };
@@ -2481,6 +2511,7 @@ function checkMixAnswer() {
     mixStats.streak=0;
     mixStats.wrongMap[vkey(verb)] = (mixStats.wrongMap[vkey(verb)] || { k:verb.dict.k, h:verb.dict.h, cnt:0 });
     mixStats.wrongMap[vkey(verb)].cnt++;
+    handleMixRoundWrong();
     inp.className='answer-input wrong';
     rc.className='result-card wrong';
     document.getElementById('mix-result-title').className='result-title wrong';
