@@ -391,6 +391,7 @@ ruby rt {
 .conj-preview b { color: #3b5bdb; }
 .vrow-check { display: flex; align-items: center; flex-shrink: 0; }
 .vrow-check input { width: 20px; height: 20px; accent-color: #3b5bdb; cursor: pointer; }
+.pos-sel { font-size: 11px; padding: 3px 4px; border: 1px solid #dfe3ee; border-radius: 6px; color: #555; background: #fff; max-width: 78px; flex-shrink: 0; -webkit-appearance: menulist; }
 .review-row.off { opacity: 0.4; }
 
 /* ── Mode tabs (て형 / 암기) ── */
@@ -633,6 +634,15 @@ ruby rt {
     <div class="form-group">
       <label>뜻 (한국어, 필수)</label>
       <input id="v-meaning" placeholder="날씨" style="font-family:inherit">
+    </div>
+    <div class="form-group">
+      <label>품사 (시제·문형 연습용 — 명사·형용사는 활용 자동 생성. 동사는 추가 후 '→동사' 사용)</label>
+      <select id="v-pos">
+        <option value="">표현 (활용 없음)</option>
+        <option value="noun">명사 (예: 学生 → 学生だった/でした)</option>
+        <option value="iadj">い형용사 (예: 高い → 高かった)</option>
+        <option value="naadj">な형용사 (예: 静か → 静かだった/でした)</option>
+      </select>
     </div>
     <div class="conj-preview" id="v-preview"></div>
     <div class="form-group">
@@ -1040,10 +1050,20 @@ function drawFromBag(key, pool) {
 }
 function drawVerb(mode) { return drawFromBag(mode, quizVerbs()); }
 
-// 표현(단어·구) 저장소: { dict:{k,h}, meaning, exJp, exKo, custom:true, isVocab:true }
+// 표현(단어·구) 저장소: { dict:{k,h}, meaning, exJp, exKo, custom:true, isVocab:true, pos?:'noun'|'iadj'|'naadj' }
+// pos 태그가 있는 항목은 (향후) 시제·문형 탭이 자동으로 흡수해 활용을 규칙 생성. 없으면 암기 전용 '표현'.
 let vocab = [];
 try { vocab = JSON.parse(localStorage.getItem('jp_vocab') || '[]'); } catch(e) {}
 function saveVocab() { localStorage.setItem('jp_vocab', JSON.stringify(vocab)); }
+
+// 품사 태그 (동사는 별도 '동사로 전환' 경로 사용)
+const POS_OPTIONS = [
+  { id:'',      label:'표현 (활용 없음)', short:'표현' },
+  { id:'noun',  label:'명사',            short:'명사' },
+  { id:'iadj',  label:'い형용사',         short:'い형' },
+  { id:'naadj', label:'な형용사',         short:'な형' },
+];
+const posLabel = p => (POS_OPTIONS.find(o => o.id === (p || ''))?.short) || '표현';
 
 // 기존에 암기 복습에만 ⭐ 되어 있던 '동사'를 て형·활용 복습에도 1회 동기화
 // (⭐ 3중 동기화 기능 이전에 별표한 동사들을 자동 반영. 이후 수동 삭제와 충돌하지 않도록 1회만)
@@ -1511,13 +1531,21 @@ function confirmAddVocab() {
   if (!k || !meaning) { alert('표기(일본어)와 뜻은 필수입니다.'); return; }
   const h = g('v-h') || k;   // 읽기 비우면 표기 그대로
   if ([...allVerbs(), ...vocab].some(it => it.dict.k === k)) { alert(`'${k}' 는 이미 목록(동사/표현)에 있어요.`); return; }
-  vocab.push({ dict:{k,h}, meaning, exJp:g('v-ex-jp'), exKo:g('v-ex-ko'), custom:true, isVocab:true });
+  const pos = document.getElementById('v-pos').value;
+  if (pos && h === k && /[^぀-ゟ]/.test(k)) {
+    if (!confirm(`품사(${posLabel(pos)})를 지정했는데 읽기(히라가나)가 비어 있어요.\n시제 활용을 정확히 만들려면 읽기가 필요합니다. 이대로 추가할까요?`)) return;
+  }
+  if (pos === 'iadj' && !h.endsWith('い')) {
+    if (!confirm(`'${k}'의 읽기(${h})가 い로 끝나지 않아요. い형용사가 맞나요?\n(きれい처럼 예외도 있지만 대개 い로 끝납니다)`)) return;
+  }
+  vocab.push({ dict:{k,h}, meaning, exJp:g('v-ex-jp'), exKo:g('v-ex-ko'), custom:true, isVocab:true, ...(pos && { pos }) });
   saveVocab();
   ['v-k','v-h','v-meaning','v-ex-jp','v-ex-ko'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('v-pos').value = '';
   vAutoH = false; vAutoM = false;
   vocabDirty = true;
   renderVocabList();
-  alert(`"${k}" 표현 추가 완료!`);
+  alert(`"${k}" ${posLabel(pos)} 추가 완료!`);
 }
 // 암기 항목 = 모든 동사 + 표현 (관리·검색용)
 function memoListRows() {
@@ -1530,7 +1558,13 @@ function memoListRows() {
 function memoRowHtml(o, isHidden) {
   const v = o.v, isVerb = o.kind === '동사';
   const s = verbStats[vkey(v)] || { total:0, correct:0, wrong:0 };
-  const tag = `<span style="font-size:10px;color:#3b5bdb;font-weight:700">${o.kind}${o.del ? '·내' : ''}</span>`;
+  const kindLabel = isVerb ? '동사' : posLabel(v.pos);
+  const tag = `<span style="font-size:10px;color:#3b5bdb;font-weight:700">${kindLabel}${o.del ? '·내' : ''}</span>`;
+  // 표현(vocab) 항목: 품사 인라인 지정 → 시제·문형 연습에 자동 반영
+  const posSel = (o.kind === '표현' && !isHidden)
+    ? `<select class="pos-sel" title="품사 지정 (시제·문형 연습에 사용)" onchange="setVocabPos('${vkey(v)}', this.value)">
+        ${POS_OPTIONS.map(p => `<option value="${p.id}" ${(v.pos||'')===p.id?'selected':''}>${p.short}</option>`).join('')}
+      </select>` : '';
   // 동사만 '활용 포함' 체크 (숨김 목록에선 표시 안 함)
   const conjChk = (isVerb && !isHidden)
     ? `<label class="vrow-check" title="동사 활용·て형 연습에 포함"><input type="checkbox" ${!disabledVerbs.has(vkey(v)) ? 'checked' : ''} onchange="toggleConjInclude('${vkey(v)}')"></label>`
@@ -1538,8 +1572,8 @@ function memoRowHtml(o, isHidden) {
   const hideBtn = isHidden
     ? `<button class="rv-del" style="color:#3b5bdb" onclick="toggleHidden('${vkey(v)}')" title="복원">↩︎</button>`
     : `<button class="rv-del" onclick="toggleHidden('${vkey(v)}')" title="숨김">🙈</button>`;
-  // 표현을 동사로 전환(활용/て형 연습 가능하게)
-  const toVerb = (o.kind === '표현' && !isHidden)
+  // 표현을 동사로 전환(활용/て형 연습 가능하게). 품사가 지정된 항목은 숨김(비동사로 분류됨)
+  const toVerb = (o.kind === '표현' && !isHidden && !v.pos)
     ? `<button class="rv-del" style="color:#3b5bdb;font-size:12px" onclick="convertVocabToVerb('${vkey(v)}')" title="동사로 전환(활용 연습 가능)">→동사</button>` : '';
   const del = o.del ? `<button class="rv-del" onclick="deleteMemoItem('${o.del}','${vkey(v)}')" title="삭제">🗑️</button>` : '';
   // ⭐ 암기 복습 목록에 추가/제외 토글
@@ -1553,8 +1587,23 @@ function memoRowHtml(o, isHidden) {
     <div style="flex:1">
       <div class="rv-main">${ruby(v.dict.k, v.dict.h)} <span style="color:#888;font-weight:400">${v.meaning}</span> ${tag}</div>
       <div class="rv-sub">${v.exJp ? '📝 · ' : ''}푼 <b>${s.total}</b> · 맞춤 <b style="color:#2e7d32">${s.correct}</b> · 틀림 <b style="color:#e53935">${s.wrong}</b></div>
-    </div>${starBtn}${toVerb}${hideBtn}${del}
+    </div>${posSel}${starBtn}${toVerb}${hideBtn}${del}
   </div>`;
+}
+// 표현 항목 품사 지정 (목록에서 인라인). 지정 시 시제·문형 연습에 자동 편입
+function setVocabPos(key, pos) {
+  const it = vocab.find(v => vkey(v) === key);
+  if (!it) return;
+  if (pos === 'iadj' && !it.dict.h.endsWith('い')) {
+    if (!confirm(`'${it.dict.k}'의 읽기(${it.dict.h})가 い로 끝나지 않아요. い형용사가 맞나요?\n(きれい처럼 예외도 있지만 대개 い로 끝납니다)`)) { renderVocabList(); return; }
+  }
+  if (pos && it.dict.h === it.dict.k && /[^぀-ゟ]/.test(it.dict.k)) {
+    alert(`※ '${it.dict.k}'는 읽기(히라가나)가 없어요. 시제 활용을 정확히 만들려면 읽기를 넣어주세요. (품사는 저장됩니다)`);
+  }
+  if (pos) it.pos = pos; else delete it.pos;
+  saveVocab();
+  vocabDirty = true;
+  renderVocabList();
 }
 // 표현/동사 목록에서 ⭐로 복습 목록에 추가·제외 (통합 toggleStar 사용)
 function toggleStarFromList(key) {
