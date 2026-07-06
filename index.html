@@ -2536,13 +2536,13 @@ function handleMixRoundWrong() {
 function renderMix(verb, target) {
   mixCur = { verb, target };
   document.getElementById('mix-form-label').textContent = target.kind === 'conj' ? '활용 만들기' : '표현 만들기';
-  // 섞어서 탭: 읽기(후리가나) 숨겨 암기 허들 — 한자 표기만 제시(정답 공개 때 읽기 표시)
-  document.getElementById('mix-display').textContent = verb.dict.k;
-  // 섞어서 탭: 활용(conj)은 일본어 형태 힌트를 숨겨 암기 허들을 둠 (한국어 이름+뜻만)
-  //   예) '가능형 (~える·られる)' → '가능형' + '(~할 수 있다)'
+  document.getElementById('mix-display').innerHTML = ruby(verb.dict.k, verb.dict.h);
+  // 섞어서 탭: 일본어 형태 힌트를 숨겨 암기 허들 (뜻만 제시)
+  //   활용: '가능형 (~える·られる)' → '가능형 (~할 수 있다)'
+  //   표현: 'ている (~하고 있다)' → '~하고 있다' (일본어 형태 숨김)
   const badge = target.kind === 'conj'
     ? `${target.label.replace(/\s*\([^)]*\)\s*$/, '')} &nbsp;(${target.hint})`
-    : `${target.label} &nbsp;(${target.hint})`;
+    : `${target.hint}`;
   document.getElementById('mix-question').innerHTML =
     `<b>${verb.meaning}</b> 를 아래 형태로 만들어 보세요.<br>` +
     `<span class="target-badge">${badge}</span>`;
