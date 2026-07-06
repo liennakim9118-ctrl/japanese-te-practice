@@ -810,6 +810,12 @@ const DERIVATIVES = [
   { id:'te_shimau',     suffix:'しまう',    label:'てしまう',    meaning:'~해 버리다',        expl: te => `て형(${te}) + <b>しまう</b> → 완료·후회 표현 "~해 버리다"` },
   { id:'te_kara',       suffix:'から',      label:'てから',      meaning:'~하고 나서',        expl: te => `て형(${te}) + <b>から</b> → 순서 표현 "~하고 나서"` },
   { id:'te_oku',        suffix:'おく',      label:'ておく',      meaning:'~해 두다',          expl: te => `て형(${te}) + <b>おく</b> → 준비 표현 "미리 ~해 두다"` },
+  { id:'te_itadakemasu', suffix:'いただけますか', label:'ていただけますか', meaning:'~해 주실 수 있나요', expl: te => `て형(${te}) + <b>いただけますか</b> → 정중 요청 "~해 주실 수 있나요?" (てください보다 공손)` },
+  { id:'te_ageru',      suffix:'あげる',    label:'てあげる',    meaning:'~해 주다 (내가 남에게)', expl: te => `て형(${te}) + <b>あげる</b> → 수수 표현 "(내가 남에게) ~해 주다"` },
+  { id:'te_kureru',     suffix:'くれる',    label:'てくれる',    meaning:'~해 주다 (남이 나에게)', expl: te => `て형(${te}) + <b>くれる</b> → 수수 표현 "(남이 나에게) ~해 주다"` },
+  { id:'te_morau',      suffix:'もらう',    label:'てもらう',    meaning:'~해 받다',          expl: te => `て형(${te}) + <b>もらう</b> → 수수 표현 "(남에게) ~해 받다"` },
+  { id:'te_iku',        suffix:'いく',      label:'ていく',      meaning:'~해 가다 (변화·방향)', expl: te => `て형(${te}) + <b>いく</b> → 방향·변화 "~해 가다 / 점점 ~해지다"` },
+  { id:'te_kuru',       suffix:'くる',      label:'てくる',      meaning:'~해 오다 (변화·방향)', expl: te => `て형(${te}) + <b>くる</b> → 방향·변화 "~해 오다 / ~하기 시작하다"` },
 ];
 
 // 활용 연습(기본 활용) — 뜻 뉘앙스로 출제, 정답에서 활용형 이름 공개
@@ -825,7 +831,13 @@ const CONJ_FORMS = [
   { id:'proh', label:'금지형 (기본형+な)',    nuance:'~하지 마라' },
   { id:'pass', label:'수동형 (~れる·られる)', nuance:'~당하다 / ~받다' },
   { id:'caus', label:'사역형 (~せる·させる)', nuance:'~하게 하다 / 시키다' },
-  { id:'desidneg', label:'희망 부정형 (~たくない)', nuance:'~하고 싶지 않다' },
+  { id:'desi',      label:'희망형 (~たい)',        nuance:'~하고 싶다' },
+  { id:'desidneg',  label:'희망 부정형 (~たくない)', nuance:'~하고 싶지 않다' },
+  { id:'cond_tara', label:'조건형 (~たら)',        nuance:'~하면 / ~했더니' },
+  { id:'naide_kudasai', label:'부정 요청 (~ないでください)', nuance:'~하지 마세요' },
+  { id:'nagara',    label:'동시동작 (~ながら)',     nuance:'~하면서' },
+  { id:'nasai',     label:'지시 (~なさい)',        nuance:'~해라 (부드러운 지시)' },
+  { id:'tari',      label:'열거 (~たり)',          nuance:'~하기도 하고' },
 ];
 const E_ROW = {'う':'え','く':'け','ぐ':'げ','す':'せ','つ':'て','ぬ':'ね','ぶ':'べ','む':'め','る':'れ'};
 const O_ROW = {'う':'お','く':'こ','ぐ':'ご','す':'そ','つ':'と','ぬ':'の','ぶ':'ぼ','む':'も','る':'ろ'};
@@ -841,6 +853,15 @@ function conjForm(verb, id) {
   if (id === 'desidneg') { // 희망 부정형: ます형 어간(연용형) + たくない
     return { k: verb.masu.k.slice(0,-2) + 'たくない', h: verb.masu.h.slice(0,-2) + 'たくない' };
   }
+  // ます어간(연용형) 기반: 희망형·동시·지시
+  if (id === 'desi')   return { k: verb.masu.k.slice(0,-2) + 'たい',   h: verb.masu.h.slice(0,-2) + 'たい' };
+  if (id === 'nagara') return { k: verb.masu.k.slice(0,-2) + 'ながら', h: verb.masu.h.slice(0,-2) + 'ながら' };
+  if (id === 'nasai')  return { k: verb.masu.k.slice(0,-2) + 'なさい', h: verb.masu.h.slice(0,-2) + 'なさい' };
+  // た형 기반: 조건(たら)·열거(たり)
+  if (id === 'cond_tara') return { k: verb.ta.k + 'ら', h: verb.ta.h + 'ら' };
+  if (id === 'tari')      return { k: verb.ta.k + 'り', h: verb.ta.h + 'り' };
+  // ない형 기반: 부정 요청
+  if (id === 'naide_kudasai') return { k: verb.nai.k + 'でください', h: verb.nai.h + 'でください' };
   const dk = verb.dict.k, dh = verb.dict.h, g = verb.group;
   if (g === 3) {
     if (dh.endsWith('する')) {
@@ -882,6 +903,17 @@ let settings = { derivs: DERIVATIVES.map(d=>d.id) };
 try {
   const saved = JSON.parse(localStorage.getItem('jp_settings') || 'null');
   if (saved) settings = saved;
+} catch(e) {}
+if (!Array.isArray(settings.derivs)) settings.derivs = DERIVATIVES.map(d=>d.id);
+// 새로 추가된 표현(파생)은 기본 on. 단, 사용자가 직접 끈 기존 항목은 되살리지 않음(known 기준)
+try {
+  const ORIG_DERIVS = ['temo_ii','te_wa_ikenai','te_iru','te_kudasai','te_miru','te_shimau','te_kara','te_oku'];
+  const allD = DERIVATIVES.map(d=>d.id);
+  const knownD = JSON.parse(localStorage.getItem('jp_deriv_known') || 'null') || ORIG_DERIVS;
+  let ch = false;
+  for (const id of allD) if (!knownD.includes(id) && !settings.derivs.includes(id)) { settings.derivs.push(id); ch = true; }
+  if (ch) localStorage.setItem('jp_settings', JSON.stringify(settings));
+  localStorage.setItem('jp_deriv_known', JSON.stringify(allD));
 } catch(e) {}
 
 // ── 통계: 하루 단위 (KST 00시 리셋), 새로고침해도 유지 ──
