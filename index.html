@@ -1645,7 +1645,7 @@ function confirmAddVocab() {
   if (pos === 'iadj' && !h.endsWith('い')) {
     if (!confirm(`'${k}'의 읽기(${h})가 い로 끝나지 않아요. い형용사가 맞나요?\n(きれい처럼 예외도 있지만 대개 い로 끝납니다)`)) return;
   }
-  vocab.push({ dict:{k,h}, meaning, exJp:g('v-ex-jp'), exKo:g('v-ex-ko'), custom:true, isVocab:true, ...(pos && { pos }) });
+  vocab.push({ dict:{k,h}, meaning, exJp:g('v-ex-jp'), exKo:g('v-ex-ko'), custom:true, isVocab:true, addedAt:Date.now(), ...(pos && { pos }) });
   saveVocab();
   ['v-k','v-h','v-meaning','v-ex-jp','v-ex-ko'].forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('v-pos').value = '';
@@ -1656,11 +1656,12 @@ function confirmAddVocab() {
 }
 // 암기 항목 = 모든 동사 + 표현 (관리·검색용)
 function memoListRows() {
-  return [
-    ...BASE_VERBS.map(v => ({ v, kind:'동사', del:null })),
+  // 내장 동사는 위, 사용자가 추가한 항목(동사·표현)은 추가 순서대로 아래에 (최근 추가일수록 맨 밑)
+  const added = [
     ...customVerbs.map(v => ({ v, kind:'동사', del:'verb' })),
     ...vocab.map(v => ({ v, kind:'표현', del:'vocab' })),
-  ];
+  ].sort((a, b) => (a.v.addedAt || 0) - (b.v.addedAt || 0));
+  return [ ...BASE_VERBS.map(v => ({ v, kind:'동사', del:null })), ...added ];
 }
 function memoRowHtml(o, isHidden) {
   // 목록 행은 간결하게: 표기·뜻·상태만. 탭하면 상세 시트에서 모든 동작 처리.
@@ -1767,7 +1768,7 @@ function convertVocabToVerb(key) {
   }
   if (allVerbs().some(x => x.dict.k === c.dict.k)) { alert('이미 동사 목록에 있어요.'); return; }
   if (!confirm(`'${c.dict.k}'을(를) 동사로 전환할까요?\n(${GROUP_NAME[c.group]} · て형 ${c.te.h} · 활용/て형 연습에 사용 가능)\n※ 그룹이 틀리면 전환 후 다시 확인해 주세요.`)) return;
-  const newVerb = { dict:c.dict, masu:c.masu, nai:c.nai, ta:c.ta, te:c.te, meaning:v.meaning, group:c.group, custom:true, ...(v.exJp && { exJp:v.exJp }), ...(v.exKo && { exKo:v.exKo }) };
+  const newVerb = { dict:c.dict, masu:c.masu, nai:c.nai, ta:c.ta, te:c.te, meaning:v.meaning, group:c.group, custom:true, addedAt:(v.addedAt || Date.now()), ...(v.exJp && { exJp:v.exJp }), ...(v.exKo && { exKo:v.exKo }) };
   customVerbs.push(newVerb);
   localStorage.setItem('jp_custom_verbs', JSON.stringify(customVerbs));
   vocab.splice(i, 1); saveVocab();
