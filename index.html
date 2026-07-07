@@ -2498,6 +2498,14 @@ function mixTargets() {
 function mixAnswer(verb, t) {
   return t.kind === 'conj' ? conjForm(verb, t.id) : { k: verb.te.k + t.suffix, h: verb.te.h + t.suffix };
 }
+// 접미사를 숨기는 섞어서 탭에서, 같은 한국어 이름을 가진 활용형들(예: 조건형 ~ば/~たら)의 정답 목록
+function mixConjSiblings(verb, target) {
+  if (target.kind !== 'conj') return [];
+  const kor = target.label.replace(/\s*\([^)]*\)\s*$/, '');
+  return CONJ_FORMS.filter(f => f.label.replace(/\s*\([^)]*\)\s*$/, '') === kor)
+    .map(f => ({ suf: (f.label.match(/\(([^)]*)\)/) || [,''])[1], ans: conjForm(verb, f.id) }))
+    .filter(x => x.ans);
+}
 function newMixQuestion() {
   rolloverMixStats();
   const pool = quizVerbs();
@@ -2570,7 +2578,12 @@ function checkMixAnswer() {
   if (!user) { inp.focus(); return; }
   const { verb, target } = mixCur;
   const ans = mixAnswer(verb, target);
-  const ok = (user === norm(ans.h) || user === norm(ans.k));
+  const sibs = mixConjSiblings(verb, target);
+  const multi = sibs.length > 1;
+  // 섞어서 탭은 접미사를 숨기므로 같은 이름 활용형(조건형 ~ば/~たら 등)은 어느 쪽이든 정답 인정
+  const ok = multi
+    ? sibs.some(s => user === norm(s.ans.h) || user === norm(s.ans.k))
+    : (user === norm(ans.h) || user === norm(ans.k));
 
   mixStats.total++;
   bumpVerbStat(verb, ok);
@@ -2581,10 +2594,15 @@ function checkMixAnswer() {
   const rc = document.getElementById('mix-result');
   rc.style.display='block';
   const teDisplay = ruby(verb.te.k, verb.te.h);
+  const korName = target.kind === 'conj' ? target.label.replace(/\s*\([^)]*\)\s*$/, '') : '';
   const explHtml = target.kind === 'conj'
-    ? `${ruby(verb.dict.k, verb.dict.h)} (${verb.meaning}) 의 <b>${target.label}</b>`
+    ? `${ruby(verb.dict.k, verb.dict.h)} (${verb.meaning}) 의 <b>${target.label}</b>` +
+      (multi ? `<br><span style="color:#888;font-size:12px">${korName}은 ${sibs.map(s => s.suf).join(' · ')} 모두 정답</span>` : '')
     : `${ruby(verb.dict.k, verb.dict.h)}의 て형 → <b>${teDisplay}</b><br>${target.expl(teDisplay)}`;
-  const answerHtml = `<div class="correct-answer">${ruby(ans.k, ans.h)}</div>` +
+  const ansShow = multi
+    ? sibs.map(s => ruby(s.ans.k, s.ans.h)).join('<span style="color:#bbb"> / </span>')
+    : ruby(ans.k, ans.h);
+  const answerHtml = `<div class="correct-answer">${ansShow}</div>` +
     `<div class="explanation">${explHtml}${verb.note ? `<span class="note-warn">${verb.note}</span>` : ''}</div>`;
 
   if (ok) {
