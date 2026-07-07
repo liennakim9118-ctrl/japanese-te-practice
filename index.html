@@ -622,7 +622,7 @@ ruby rt {
   <div class="modal">
     <h2>＋ 암기 항목 관리</h2>
 
-    <div class="section-title">새 표현 추가</div>
+    <div class="section-title" id="v-form-title">새 표현 추가</div>
     <div class="form-group">
       <label>표기 — 일본어 (필수, 예: 天気 / 気をつけて)</label>
       <input id="v-k" placeholder="天気　← 한자·かな·구 모두 가능">
@@ -653,7 +653,8 @@ ruby rt {
       <label>예문 — 한국어 해석 (선택)</label>
       <input id="v-ex-ko" placeholder="오늘은 날씨가 좋네요." style="font-family:inherit">
     </div>
-    <button class="btn-confirm" style="width:100%" onclick="confirmAddVocab()">＋ 추가</button>
+    <button class="btn-confirm" id="v-add-btn" style="width:100%" onclick="confirmAddVocab()">＋ 추가</button>
+    <button id="v-cancel-btn" onclick="cancelEditVocab()" style="display:none;width:100%;margin-top:6px;padding:10px;border:1px solid #ccc;border-radius:10px;background:#f3f3f3;color:#555;font-weight:600;cursor:pointer">수정 취소</button>
 
     <div class="section-title">암기 항목 (동사 + 표현)</div>
     <div class="form-group" style="margin-bottom:8px">
@@ -1554,16 +1555,65 @@ function updateVocabPreview() {
 }
 function openVocab() { vAutoH = false; vAutoM = false; updateVocabPreview(); renderVocabList(); document.getElementById('modal-vocab').classList.add('open'); }
 function closeVocab() {
+  if (editingVocabKey) cancelEditVocab();   // 편집 중이었다면 상태 초기화
   closeModal('modal-vocab');
   if (vocabDirty && !memoReviewMode) { vocabDirty = false; if (appMode === 'memo') newMemoQuestion(); }
+}
+// 저장된 표현 클릭 → 추가 폼에 값을 채워 '수정 모드'로 전환
+let editingVocabKey = null;
+function editVocab(key) {
+  const it = vocab.find(v => vkey(v) === key);
+  if (!it) return;
+  editingVocabKey = key;
+  const set = (id, val) => document.getElementById(id).value = val || '';
+  set('v-k', it.dict.k); set('v-h', it.dict.h); set('v-meaning', it.meaning);
+  set('v-ex-jp', it.exJp); set('v-ex-ko', it.exKo);
+  document.getElementById('v-pos').value = it.pos || '';
+  document.getElementById('v-k').disabled = true;   // 편집 중엔 표기(식별키) 고정
+  document.getElementById('v-form-title').textContent = `✏️ "${it.dict.k}" 수정`;
+  document.getElementById('v-add-btn').textContent = '수정 완료';
+  document.getElementById('v-cancel-btn').style.display = '';
+  vAutoH = false; vAutoM = false;
+  updateVocabPreview();
+  const modal = document.querySelector('#modal-vocab .modal');
+  if (modal) modal.scrollTop = 0;
+  document.getElementById('v-meaning').focus();
+}
+function cancelEditVocab() {
+  editingVocabKey = null;
+  ['v-k','v-h','v-meaning','v-ex-jp','v-ex-ko'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('v-pos').value = '';
+  document.getElementById('v-k').disabled = false;
+  document.getElementById('v-form-title').textContent = '새 표현 추가';
+  document.getElementById('v-add-btn').textContent = '＋ 추가';
+  document.getElementById('v-cancel-btn').style.display = 'none';
+  vAutoH = false; vAutoM = false;
+  updateVocabPreview();
 }
 function confirmAddVocab() {
   const g = id => document.getElementById(id).value.trim();
   const k = g('v-k'), meaning = g('v-meaning');
   if (!k || !meaning) { alert('표기(일본어)와 뜻은 필수입니다.'); return; }
   const h = g('v-h') || k;   // 읽기 비우면 표기 그대로
-  if ([...allVerbs(), ...vocab].some(it => it.dict.k === k)) { alert(`'${k}' 는 이미 목록(동사/표현)에 있어요.`); return; }
   const pos = document.getElementById('v-pos').value;
+  // 수정 모드: 표기(키)는 고정, 나머지만 갱신
+  if (editingVocabKey) {
+    const it = vocab.find(v => vkey(v) === editingVocabKey);
+    if (it) {
+      it.dict.h = h; it.meaning = meaning;
+      it.exJp = g('v-ex-jp'); it.exKo = g('v-ex-ko');
+      if (pos) it.pos = pos; else delete it.pos;
+      saveVocab();
+      if (memoReview[editingVocabKey]) { memoReview[editingVocabKey].v = it; saveMemoReview(); }
+    }
+    const kk = it ? it.dict.k : k;
+    cancelEditVocab();
+    vocabDirty = true;
+    renderVocabList();
+    alert(`"${kk}" 수정 완료!`);
+    return;
+  }
+  if ([...allVerbs(), ...vocab].some(it => it.dict.k === k)) { alert(`'${k}' 는 이미 목록(동사/표현)에 있어요.`); return; }
   if (pos && h === k && /[^぀-ゟ]/.test(k)) {
     if (!confirm(`품사(${posLabel(pos)})를 지정했는데 읽기(히라가나)가 비어 있어요.\n시제 활용을 정확히 만들려면 읽기가 필요합니다. 이대로 추가할까요?`)) return;
   }
@@ -1608,6 +1658,9 @@ function memoRowHtml(o, isHidden) {
   const toVerb = (o.kind === '표현' && !isHidden && !v.pos)
     ? `<button class="rv-del" style="color:#3b5bdb;font-size:12px" onclick="convertVocabToVerb('${vkey(v)}')" title="동사로 전환(활용 연습 가능)">→동사</button>` : '';
   const del = o.del ? `<button class="rv-del" onclick="deleteMemoItem('${o.del}','${vkey(v)}')" title="삭제">🗑️</button>` : '';
+  // 표현 수정(뜻·읽기·예문 편집)
+  const editBtn = (o.kind === '표현' && !isHidden)
+    ? `<button class="rv-del" style="color:#3b5bdb;font-size:13px" onclick="editVocab('${vkey(v)}')" title="수정·예문 추가">✏️</button>` : '';
   // ⭐ 암기 복습 목록에 추가/제외 토글
   const rv = memoReview[vkey(v)];
   const starred = !!(rv && rv.m);
@@ -1619,7 +1672,7 @@ function memoRowHtml(o, isHidden) {
     <div style="flex:1">
       <div class="rv-main">${ruby(v.dict.k, v.dict.h)} <span style="color:#888;font-weight:400">${v.meaning}</span> ${tag}</div>
       <div class="rv-sub">${v.exJp ? '📝 · ' : ''}푼 <b>${s.total}</b> · 맞춤 <b style="color:#2e7d32">${s.correct}</b> · 틀림 <b style="color:#e53935">${s.wrong}</b></div>
-    </div>${posSel}${starBtn}${toVerb}${hideBtn}${del}
+    </div>${posSel}${starBtn}${editBtn}${toVerb}${hideBtn}${del}
   </div>`;
 }
 // 표현 항목 품사 지정 (목록에서 인라인). 지정 시 시제·문형 연습에 자동 편입
