@@ -235,6 +235,8 @@ ruby rt {
 .modal-overlay.open { display: flex; }
 .detail-act { width:100%; padding:11px 12px; border:1px solid #d5d9e6; border-radius:10px; background:#fff; color:#333; font-weight:600; font-size:14px; text-align:left; cursor:pointer; }
 .detail-act:active { background:#eef1fb; }
+.vlist-group { font-size:12px; font-weight:800; color:#3b5bdb; margin:14px 0 4px; padding-top:8px; border-top:2px solid #e7eaf6; }
+.vlist-group:first-child { margin-top:2px; border-top:none; padding-top:0; }
 
 .modal {
   background: white;
@@ -1789,14 +1791,30 @@ function convertVocabToVerb(key) {
   renderVocabList();
   alert(`"${c.dict.k}" 동사로 전환 완료! 활용 체크박스가 생겼어요.`);
 }
+// 항목을 종류별로 분류 (구분선 그룹핑용)
+function itemCategory(o) {
+  if (o.kind === '동사') return '동사';
+  const p = o.v.pos;
+  return p === 'noun' ? '명사' : p === 'iadj' ? 'い형용사' : p === 'naadj' ? 'な형용사' : '표현';
+}
+const VLIST_ORDER = ['동사', '표현', '명사', 'い형용사', 'な형용사'];
 function renderVocabList() {
   const q = document.getElementById('vocab-search').value.trim();
   let rows = memoListRows();
   if (q) rows = rows.filter(o => (o.v.dict.k + ' ' + o.v.dict.h + ' ' + o.v.meaning).includes(q));
   const vis = rows.filter(o => !hidden.has(vkey(o.v)));
   const list = document.getElementById('vocab-list');
-  let html = `<div style="font-size:11px;color:#999;margin-bottom:6px">암기 출제 ${vis.length}개 · 항목을 <b>탭</b>하면 수정·예문·복습(⭐)·품사·활용포함·숨김·삭제를 할 수 있어요. (⭐ 저장 / 📝 예문 / 활용off 표시)</div>`;
-  html += vis.length ? vis.map(o => memoRowHtml(o, false)).join('') : '<div class="empty-msg">항목이 없어요.</div>';
+  let html = `<div style="font-size:11px;color:#999;margin-bottom:6px">암기 출제 ${vis.length}개 · 항목을 <b>탭</b>하면 수정·예문·복습·품사·숨김·삭제를 할 수 있어요. (⭐ 저장 / 📝 예문 / 활용off 표시)</div>`;
+  if (!vis.length) { list.innerHTML = html + '<div class="empty-msg">항목이 없어요.</div>'; return; }
+  // 종류별 그룹핑 + 구분 헤더. 그룹 안은 기존 순서(추가순) 유지.
+  const groups = {};
+  for (const o of vis) { const c = itemCategory(o); (groups[c] = groups[c] || []).push(o); }
+  for (const cat of VLIST_ORDER) {
+    const g = groups[cat];
+    if (!g || !g.length) continue;
+    html += `<div class="vlist-group">${cat} <span style="color:#aaa;font-weight:600">${g.length}</span></div>`;
+    html += g.map(o => memoRowHtml(o, false)).join('');
+  }
   list.innerHTML = html;
 }
 // 숨김 목록 (설정 메뉴)
