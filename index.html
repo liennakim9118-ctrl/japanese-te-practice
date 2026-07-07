@@ -233,6 +233,8 @@ ruby rt {
   padding: 0;
 }
 .modal-overlay.open { display: flex; }
+.detail-act { width:100%; padding:11px 12px; border:1px solid #d5d9e6; border-radius:10px; background:#fff; color:#333; font-weight:600; font-size:14px; text-align:left; cursor:pointer; }
+.detail-act:active { background:#eef1fb; }
 
 .modal {
   background: white;
@@ -665,6 +667,13 @@ ruby rt {
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeVocab()">닫기</button>
     </div>
+  </div>
+</div>
+
+<!-- ───── Item Detail Sheet (항목 상세·수정) ───── -->
+<div class="modal-overlay" id="modal-item" style="z-index:200">
+  <div class="modal">
+    <div id="item-detail-body"></div>
   </div>
 </div>
 
@@ -1133,6 +1142,22 @@ if (!localStorage.getItem('jp_review_prune_v1')) {
   saveMemoReview(); saveReview(); saveConjReview();
   localStorage.setItem('jp_review_prune_v1', '1');
 }
+
+// 동사(내장·커스텀) 뜻·예문 수정값 오버라이드 (동사는 코드/별도 저장이라 편집분을 여기에 보관 후 로드 시 덮어씀)
+let itemOverrides = {};
+try { itemOverrides = JSON.parse(localStorage.getItem('jp_item_overrides') || '{}'); } catch(e) {}
+function saveItemOverrides() { localStorage.setItem('jp_item_overrides', JSON.stringify(itemOverrides)); }
+function applyItemOverrides() {
+  for (const v of allVerbs()) {
+    const o = itemOverrides[vkey(v)];
+    if (!o) continue;
+    if (o.meaning != null) v.meaning = o.meaning;
+    if (o.exJp != null) v.exJp = o.exJp;
+    if (o.exKo != null) v.exKo = o.exKo;
+  }
+}
+applyItemOverrides();
+
 // 암기 전용 출제 제외(off) 집합 (te/conj의 disabledVerbs와 완전 별개)
 // 암기 출제 풀 = 숨김 아닌 모든 동사 + 표현 (중심 데이터)
 function memoItems() { return [...allVerbs(), ...vocab].filter(it => !hidden.has(vkey(it))); }
@@ -1638,42 +1663,75 @@ function memoListRows() {
   ];
 }
 function memoRowHtml(o, isHidden) {
+  // 목록 행은 간결하게: 표기·뜻·상태만. 탭하면 상세 시트에서 모든 동작 처리.
   const v = o.v, isVerb = o.kind === '동사';
   const s = verbStats[vkey(v)] || { total:0, correct:0, wrong:0 };
   const kindLabel = isVerb ? '동사' : posLabel(v.pos);
-  const tag = `<span style="font-size:10px;color:#3b5bdb;font-weight:700">${kindLabel}${o.del ? '·내' : ''}</span>`;
-  // 표현(vocab) 항목: 품사 인라인 지정 → 시제·문형 연습에 자동 반영
-  const posSel = (o.kind === '표현' && !isHidden)
-    ? `<select class="pos-sel" title="품사 지정 (시제·문형 연습에 사용)" onchange="setVocabPos('${vkey(v)}', this.value)">
-        ${POS_OPTIONS.map(p => `<option value="${p.id}" ${(v.pos||'')===p.id?'selected':''}>${p.short}</option>`).join('')}
-      </select>` : '';
-  // 동사만 '활용 포함' 체크 (숨김 목록에선 표시 안 함)
-  const conjChk = (isVerb && !isHidden)
-    ? `<label class="vrow-check" title="동사 활용·て형 연습에 포함"><input type="checkbox" ${!disabledVerbs.has(vkey(v)) ? 'checked' : ''} onchange="toggleConjInclude('${vkey(v)}')"></label>`
-    : `<span style="width:20px;flex-shrink:0"></span>`;
-  const hideBtn = isHidden
-    ? `<button class="rv-del" style="color:#3b5bdb" onclick="toggleHidden('${vkey(v)}')" title="복원">↩︎</button>`
-    : `<button class="rv-del" onclick="toggleHidden('${vkey(v)}')" title="숨김">🙈</button>`;
-  // 표현을 동사로 전환(활용/て형 연습 가능하게). 품사가 지정된 항목은 숨김(비동사로 분류됨)
-  const toVerb = (o.kind === '표현' && !isHidden && !v.pos)
-    ? `<button class="rv-del" style="color:#3b5bdb;font-size:12px" onclick="convertVocabToVerb('${vkey(v)}')" title="동사로 전환(활용 연습 가능)">→동사</button>` : '';
-  const del = o.del ? `<button class="rv-del" onclick="deleteMemoItem('${o.del}','${vkey(v)}')" title="삭제">🗑️</button>` : '';
-  // 표현 수정(뜻·읽기·예문 편집)
-  const editBtn = (o.kind === '표현' && !isHidden)
-    ? `<button class="rv-del" style="color:#3b5bdb;font-size:13px" onclick="editVocab('${vkey(v)}')" title="수정·예문 추가">✏️</button>` : '';
-  // ⭐ 암기 복습 목록에 추가/제외 토글
   const rv = memoReview[vkey(v)];
-  const starred = !!(rv && rv.m);
-  const starBtn = !isHidden
-    ? `<button class="rv-del" style="color:${starred ? '#f5a623' : '#bbb'};font-size:15px" onclick="toggleStarFromList('${vkey(v)}')" title="${starred ? '복습에서 제외' : (isVerb ? 'て형·활용·암기 복습에 추가' : '암기 복습에 추가')}">${starred ? '⭐' : '☆'}</button>`
-    : '';
-  return `<div class="review-row">
-    ${conjChk}
+  const flags = [
+    (rv && rv.m) ? '⭐' : '',
+    v.exJp ? '📝' : '',
+    (isVerb && disabledVerbs.has(vkey(v))) ? '활용off' : '',
+  ].filter(Boolean).join(' ');
+  return `<div class="review-row" style="cursor:pointer" onclick="openItemDetail('${vkey(v)}')">
     <div style="flex:1">
-      <div class="rv-main">${ruby(v.dict.k, v.dict.h)} <span style="color:#888;font-weight:400">${v.meaning}</span> ${tag}</div>
-      <div class="rv-sub">${v.exJp ? '📝 · ' : ''}푼 <b>${s.total}</b> · 맞춤 <b style="color:#2e7d32">${s.correct}</b> · 틀림 <b style="color:#e53935">${s.wrong}</b></div>
-    </div>${posSel}${starBtn}${editBtn}${toVerb}${hideBtn}${del}
+      <div class="rv-main">${ruby(v.dict.k, v.dict.h)} <span style="color:#888;font-weight:400">${v.meaning}</span> <span style="font-size:10px;color:#3b5bdb;font-weight:700">${kindLabel}${o.del ? '·내' : ''}</span></div>
+      <div class="rv-sub">${flags ? flags + ' · ' : ''}푼 <b>${s.total}</b> · 맞춤 <b style="color:#2e7d32">${s.correct}</b> · 틀림 <b style="color:#e53935">${s.wrong}</b></div>
+    </div>
+    <span style="color:#bbb;font-size:20px;padding:0 4px">›</span>
   </div>`;
+}
+// 항목 상세·수정 시트 (행 탭 시): 수정 폼 + 모든 동작을 한 곳에
+function openItemDetail(key) {
+  const o = memoListRows().find(x => vkey(x.v) === key);
+  if (!o) { closeModal('modal-item'); return; }
+  const v = o.v, isVerb = o.kind === '동사';
+  const rv = memoReview[key], starred = !!(rv && rv.m);
+  const esc = s => (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  let h = `<h2 style="margin-bottom:2px">${ruby(v.dict.k, v.dict.h)}</h2>`;
+  h += `<div style="font-size:12px;color:#888;margin-bottom:14px">${isVerb ? '동사' : posLabel(v.pos)}${o.del ? ' · 내가 추가' : ' · 내장'}</div>`;
+  h += `<div class="section-title">수정</div>`;
+  if (!isVerb) h += `<div class="form-group"><label>읽기(히라가나)</label><input id="it-h" value="${esc(v.dict.h)}"></div>`;
+  h += `<div class="form-group"><label>뜻 (필수)</label><input id="it-meaning" value="${esc(v.meaning)}" style="font-family:inherit"></div>`;
+  h += `<div class="form-group"><label>예문 — 원문</label><input id="it-ex-jp" value="${esc(v.exJp)}" placeholder="今日はいい天気ですね。"></div>`;
+  h += `<div class="form-group"><label>예문 — 해석</label><input id="it-ex-ko" value="${esc(v.exKo)}" placeholder="오늘은 날씨가 좋네요." style="font-family:inherit"></div>`;
+  if (!isVerb) h += `<div class="form-group"><label>품사 (시제·문형 연습용)</label><select id="it-pos">${POS_OPTIONS.map(p => `<option value="${p.id}" ${(v.pos||'')===p.id?'selected':''}>${p.label}</option>`).join('')}</select></div>`;
+  h += `<button class="btn-confirm" style="width:100%" onclick="saveItemEdit('${key}')">수정 저장</button>`;
+  h += `<div class="section-title" style="margin-top:16px">동작</div><div style="display:flex;flex-direction:column;gap:6px">`;
+  h += `<button class="detail-act" onclick="toggleStarFromList('${key}');openItemDetail('${key}')">${starred ? '⭐ 복습에서 제외' : '☆ 복습에 추가'}${isVerb ? ' (て형·활용·암기)' : ''}</button>`;
+  if (isVerb) h += `<button class="detail-act" onclick="toggleConjInclude('${key}');openItemDetail('${key}')">${!disabledVerbs.has(key) ? '☑︎ 활용·て형 연습 포함됨 → 빼기' : '☐ 활용·て형 연습 제외됨 → 넣기'}</button>`;
+  if (o.kind === '표현' && !v.pos) h += `<button class="detail-act" onclick="convertVocabToVerb('${key}');closeModal('modal-item')">→ 동사로 전환 (활용 연습 가능)</button>`;
+  h += `<button class="detail-act" onclick="toggleHidden('${key}');closeModal('modal-item')">🙈 숨기기 (모든 연습 제외)</button>`;
+  if (o.del) h += `<button class="detail-act" style="color:#e53935" onclick="deleteMemoItem('${o.del}','${key}');closeModal('modal-item')">🗑️ 삭제</button>`;
+  h += `</div>`;
+  h += `<div class="modal-btns" style="margin-top:14px"><button class="btn-cancel" onclick="closeModal('modal-item')">닫기</button></div>`;
+  document.getElementById('item-detail-body').innerHTML = h;
+  document.getElementById('modal-item').classList.add('open');
+}
+function saveItemEdit(key) {
+  const g = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  const meaning = g('it-meaning');
+  if (!meaning) { alert('뜻은 필수예요.'); return; }
+  const exJp = g('it-ex-jp'), exKo = g('it-ex-ko');
+  const vo = vocab.find(x => vkey(x) === key);
+  if (vo) {   // 표현: 직접 수정
+    vo.dict.h = g('it-h') || vo.dict.k;
+    vo.meaning = meaning; vo.exJp = exJp; vo.exKo = exKo;
+    const pos = g('it-pos');
+    if (pos) vo.pos = pos; else delete vo.pos;
+    saveVocab();
+    if (memoReview[key]) { memoReview[key].v = vo; saveMemoReview(); }
+  } else {    // 동사(내장·커스텀): 오버라이드로 보관 후 적용
+    itemOverrides[key] = { meaning, exJp, exKo };
+    saveItemOverrides();
+    applyItemOverrides();
+    const vObj = allVerbs().find(x => vkey(x) === key);
+    for (const L of [memoReview, review, conjReview]) if (L[key] && vObj) L[key].v = vObj;
+    saveMemoReview(); saveReview(); saveConjReview();
+  }
+  vocabDirty = true; verbSetDirty = true;
+  renderVocabList();
+  openItemDetail(key);   // 시트 갱신
 }
 // 표현 항목 품사 지정 (목록에서 인라인). 지정 시 시제·문형 연습에 자동 편입
 function setVocabPos(key, pos) {
@@ -1736,7 +1794,7 @@ function renderVocabList() {
   if (q) rows = rows.filter(o => (o.v.dict.k + ' ' + o.v.dict.h + ' ' + o.v.meaning).includes(q));
   const vis = rows.filter(o => !hidden.has(vkey(o.v)));
   const list = document.getElementById('vocab-list');
-  let html = `<div style="font-size:11px;color:#999;margin-bottom:6px">암기 출제 ${vis.length}개 · 왼쪽 ☑︎=활용/て형 연습 포함(동사) · ⭐=복습에 추가(동사는 て형·활용·암기 모두) · 🙈=숨김 (숨긴 항목은 ⚙️설정에서 관리)</div>`;
+  let html = `<div style="font-size:11px;color:#999;margin-bottom:6px">암기 출제 ${vis.length}개 · 항목을 <b>탭</b>하면 수정·예문·복습(⭐)·품사·활용포함·숨김·삭제를 할 수 있어요. (⭐ 저장 / 📝 예문 / 활용off 표시)</div>`;
   html += vis.length ? vis.map(o => memoRowHtml(o, false)).join('') : '<div class="empty-msg">항목이 없어요.</div>';
   list.innerHTML = html;
 }
