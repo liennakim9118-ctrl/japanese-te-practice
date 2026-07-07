@@ -237,6 +237,9 @@ ruby rt {
 .detail-act:active { background:#eef1fb; }
 .vlist-group { font-size:12px; font-weight:800; color:#3b5bdb; margin:14px 0 4px; padding-top:8px; border-top:2px solid #e7eaf6; }
 .vlist-group:first-child { margin-top:2px; border-top:none; padding-top:0; }
+.vcat-tabs { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:10px; }
+.vcat-tab { padding:5px 11px; border:1px solid #d5d9e6; border-radius:14px; background:#fff; color:#555; font-size:12px; font-weight:700; cursor:pointer; }
+.vcat-tab.active { background:#3b5bdb; color:#fff; border-color:#3b5bdb; }
 
 .modal {
   background: white;
@@ -1580,7 +1583,7 @@ function updateVocabPreview() {
     ? `<span style="color:#2e7d32;font-weight:700">✓ 사전</span> ${k}${r ? ' ['+r+']' : ''} · ${m || '(뜻 없음 — 직접 입력)'}`
     : `<span style="color:#e65100;font-weight:700">ⓘ 사전에 없음</span> — 읽기·뜻 직접 입력 (구·문장은 보통 여기)`;
 }
-function openVocab() { vAutoH = false; vAutoM = false; updateVocabPreview(); renderVocabList(); document.getElementById('modal-vocab').classList.add('open'); }
+function openVocab() { vocabCatFilter = '전체'; vAutoH = false; vAutoM = false; updateVocabPreview(); renderVocabList(); document.getElementById('modal-vocab').classList.add('open'); }
 function closeVocab() {
   if (editingVocabKey) cancelEditVocab();   // 편집 중이었다면 상태 초기화
   closeModal('modal-vocab');
@@ -1798,22 +1801,42 @@ function itemCategory(o) {
   return p === 'noun' ? '명사' : p === 'iadj' ? 'い형용사' : p === 'naadj' ? 'な형용사' : '표현';
 }
 const VLIST_ORDER = ['동사', '표현', '명사', 'い형용사', 'な형용사'];
+const VCAT_SHORT = { '동사':'동사', '표현':'표현', '명사':'명사', 'い형용사':'い형', 'な형용사':'な형' };
+let vocabCatFilter = '전체';
+function setVocabCat(c) { vocabCatFilter = c; renderVocabList(); }
 function renderVocabList() {
   const q = document.getElementById('vocab-search').value.trim();
   let rows = memoListRows();
   if (q) rows = rows.filter(o => (o.v.dict.k + ' ' + o.v.dict.h + ' ' + o.v.meaning).includes(q));
   const vis = rows.filter(o => !hidden.has(vkey(o.v)));
   const list = document.getElementById('vocab-list');
-  let html = `<div style="font-size:11px;color:#999;margin-bottom:6px">암기 출제 ${vis.length}개 · 항목을 <b>탭</b>하면 수정·예문·복습·품사·숨김·삭제를 할 수 있어요. (⭐ 저장 / 📝 예문 / 활용off 표시)</div>`;
+  // 종류별 개수
+  const counts = {};
+  for (const o of vis) { const c = itemCategory(o); counts[c] = (counts[c] || 0) + 1; }
+  if (!(vocabCatFilter === '전체' || counts[vocabCatFilter])) vocabCatFilter = '전체';  // 빈 탭이면 전체로
+  // 카테고리 탭 (있는 종류만)
+  let html = `<div class="vcat-tabs">`;
+  html += `<button class="vcat-tab ${vocabCatFilter==='전체'?'active':''}" onclick="setVocabCat('전체')">전체 ${vis.length}</button>`;
+  for (const cat of VLIST_ORDER) {
+    if (!counts[cat]) continue;
+    html += `<button class="vcat-tab ${vocabCatFilter===cat?'active':''}" onclick="setVocabCat('${cat}')">${VCAT_SHORT[cat]} ${counts[cat]}</button>`;
+  }
+  html += `</div>`;
+  html += `<div style="font-size:11px;color:#999;margin-bottom:6px">항목을 <b>탭</b>하면 수정·예문·복습·품사·숨김·삭제를 할 수 있어요. (⭐ 저장 / 📝 예문 / 활용off 표시)</div>`;
   if (!vis.length) { list.innerHTML = html + '<div class="empty-msg">항목이 없어요.</div>'; return; }
-  // 종류별 그룹핑 + 구분 헤더. 그룹 안은 기존 순서(추가순) 유지.
   const groups = {};
   for (const o of vis) { const c = itemCategory(o); (groups[c] = groups[c] || []).push(o); }
-  for (const cat of VLIST_ORDER) {
-    const g = groups[cat];
-    if (!g || !g.length) continue;
-    html += `<div class="vlist-group">${cat} <span style="color:#aaa;font-weight:600">${g.length}</span></div>`;
-    html += g.map(o => memoRowHtml(o, false)).join('');
+  if (vocabCatFilter === '전체') {
+    // 전체: 종류별 구분 헤더로 나눠 표시
+    for (const cat of VLIST_ORDER) {
+      const g = groups[cat];
+      if (!g || !g.length) continue;
+      html += `<div class="vlist-group">${cat} <span style="color:#aaa;font-weight:600">${g.length}</span></div>`;
+      html += g.map(o => memoRowHtml(o, false)).join('');
+    }
+  } else {
+    // 특정 탭: 해당 종류만 (헤더 없이)
+    html += (groups[vocabCatFilter] || []).map(o => memoRowHtml(o, false)).join('');
   }
   list.innerHTML = html;
 }
