@@ -1810,13 +1810,18 @@ function renderVocabList() {
   if (q) rows = rows.filter(o => (o.v.dict.k + ' ' + o.v.dict.h + ' ' + o.v.meaning).includes(q));
   const vis = rows.filter(o => !hidden.has(vkey(o.v)));
   const list = document.getElementById('vocab-list');
-  // 종류별 개수
+  const isStarred = o => { const rv = memoReview[vkey(o.v)]; return !!(rv && rv.m); };
+  // 종류별 개수 + 별표 개수
   const counts = {};
   for (const o of vis) { const c = itemCategory(o); counts[c] = (counts[c] || 0) + 1; }
-  if (!(vocabCatFilter === '전체' || counts[vocabCatFilter])) vocabCatFilter = '전체';  // 빈 탭이면 전체로
-  // 카테고리 탭 (있는 종류만)
+  const starredCount = vis.filter(isStarred).length;
+  // 선택한 탭이 비었으면 전체로
+  const tabOk = vocabCatFilter === '전체' || (vocabCatFilter === '⭐' ? starredCount : counts[vocabCatFilter]);
+  if (!tabOk) vocabCatFilter = '전체';
+  // 탭 (있는 종류·별표만)
   let html = `<div class="vcat-tabs">`;
   html += `<button class="vcat-tab ${vocabCatFilter==='전체'?'active':''}" onclick="setVocabCat('전체')">전체 ${vis.length}</button>`;
+  if (starredCount) html += `<button class="vcat-tab ${vocabCatFilter==='⭐'?'active':''}" style="${vocabCatFilter==='⭐'?'':'color:#f5a623;border-color:#f5d38a'}" onclick="setVocabCat('⭐')">⭐ ${starredCount}</button>`;
   for (const cat of VLIST_ORDER) {
     if (!counts[cat]) continue;
     html += `<button class="vcat-tab ${vocabCatFilter===cat?'active':''}" onclick="setVocabCat('${cat}')">${VCAT_SHORT[cat]} ${counts[cat]}</button>`;
@@ -1824,10 +1829,12 @@ function renderVocabList() {
   html += `</div>`;
   html += `<div style="font-size:11px;color:#999;margin-bottom:6px">항목을 <b>탭</b>하면 수정·예문·복습·품사·숨김·삭제를 할 수 있어요. (⭐ 저장 / 📝 예문 / 활용off 표시)</div>`;
   if (!vis.length) { list.innerHTML = html + '<div class="empty-msg">항목이 없어요.</div>'; return; }
+  // 별표 필터면 별표된 것만 대상으로
+  const pool = vocabCatFilter === '⭐' ? vis.filter(isStarred) : vis;
   const groups = {};
-  for (const o of vis) { const c = itemCategory(o); (groups[c] = groups[c] || []).push(o); }
-  if (vocabCatFilter === '전체') {
-    // 전체: 종류별 구분 헤더로 나눠 표시
+  for (const o of pool) { const c = itemCategory(o); (groups[c] = groups[c] || []).push(o); }
+  if (vocabCatFilter === '전체' || vocabCatFilter === '⭐') {
+    // 종류별 구분 헤더로 나눠 표시
     for (const cat of VLIST_ORDER) {
       const g = groups[cat];
       if (!g || !g.length) continue;
@@ -1835,7 +1842,7 @@ function renderVocabList() {
       html += g.map(o => memoRowHtml(o, false)).join('');
     }
   } else {
-    // 특정 탭: 해당 종류만 (헤더 없이)
+    // 특정 종류 탭: 해당 종류만 (헤더 없이)
     html += (groups[vocabCatFilter] || []).map(o => memoRowHtml(o, false)).join('');
   }
   list.innerHTML = html;
