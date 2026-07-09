@@ -1258,7 +1258,8 @@ function checkAnswer() {
   const { verb, target } = cur;
   const correctKana  = verb.te.h + target.suffix;
   const correctKanji = verb.te.k + target.suffix;
-  const ok = (userAns === correctKana || userAns === correctKanji);
+  // 다중 읽기(開く=あく/ひらく) 동사는 어느 읽기의 て형이든 정답 인정
+  const ok = verbReadingVariants(verb).some(vr => userAns === (vr.te.h + target.suffix) || userAns === (vr.te.k + target.suffix));
 
   stats.total++;
   bumpVerbStat(verb, ok);
@@ -2519,7 +2520,8 @@ function checkConjAnswer() {
   if (!user) { inp.focus(); return; }
   const { verb, fid } = conjCur;
   const ans = conjForm(verb, fid);
-  const ok = (user === norm(ans.h) || user === norm(ans.k));
+  // 다중 읽기(開く=あく/ひらく) 동사는 어느 읽기 활용이든 정답 인정
+  const ok = verbReadingVariants(verb).some(vr => { const a = conjForm(vr, fid); return a && (user === norm(a.h) || user === norm(a.k)); });
 
   conjStats.total++;
   bumpVerbStat(verb, ok);
@@ -2658,6 +2660,16 @@ function mixTargets() {
 function mixAnswer(verb, t) {
   return t.kind === 'conj' ? conjForm(verb, t.id) : { k: verb.te.k + t.suffix, h: verb.te.h + t.suffix };
 }
+// 읽기가 여러 개(콤마·가운뎃점 등)인 동사를 각 읽기별 변형으로 분해해 활용 재계산 (開く=あく/ひらく)
+function verbReadingVariants(verb) {
+  const h = (verb.dict && verb.dict.h) || '';
+  const parts = h.split(/[,，、・/]/).map(s => s.trim()).filter(Boolean);
+  if (parts.length <= 1) return [verb];
+  return parts.map(r => {
+    const c = conjugate(r, verb.dict.k, verb.group || 'auto');
+    return c ? { ...verb, dict:{ k:verb.dict.k, h:r }, masu:c.masu, nai:c.nai, ta:c.ta, te:c.te, group:c.group } : verb;
+  });
+}
 // 접미사를 숨기는 섞어서 탭에서, 같은 한국어 이름을 가진 활용형들(예: 조건형 ~ば/~たら)의 정답 목록
 function mixConjSiblings(verb, target) {
   if (target.kind !== 'conj') return [];
@@ -2740,10 +2752,14 @@ function checkMixAnswer() {
   const ans = mixAnswer(verb, target);
   const sibs = mixConjSiblings(verb, target);
   const multi = sibs.length > 1;
-  // 섞어서 탭은 접미사를 숨기므로 같은 이름 활용형(조건형 ~ば/~たら 등)은 어느 쪽이든 정답 인정
-  const ok = multi
-    ? sibs.some(s => user === norm(s.ans.h) || user === norm(s.ans.k))
-    : (user === norm(ans.h) || user === norm(ans.k));
+  // 정답 후보 = 각 읽기 변형 × (활용은 같은 이름 형제 포함 / 표현은 て+접미사)
+  //  → 접미사 숨김(조건형 ~ば/~たら)과 다중 읽기(開く=あく/ひらく)를 모두 정답 인정
+  const accept = [];
+  for (const vr of verbReadingVariants(verb)) {
+    if (target.kind === 'conj') mixConjSiblings(vr, target).forEach(s => accept.push(s.ans));
+    else accept.push({ k: vr.te.k + target.suffix, h: vr.te.h + target.suffix });
+  }
+  const ok = accept.some(a => a && (user === norm(a.h) || user === norm(a.k)));
 
   mixStats.total++;
   bumpVerbStat(verb, ok);
