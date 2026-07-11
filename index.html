@@ -433,6 +433,7 @@ ruby rt {
     <button class="mode-tab" id="tab-conj" onclick="setMode('conj')">활용</button>
     <button class="mode-tab" id="tab-te" onclick="setMode('te')">표현</button>
     <button class="mode-tab" id="tab-mix" onclick="setMode('mix')">섞어서</button>
+    <button class="mode-tab" id="tab-tense" onclick="setMode('tense')">시제</button>
   </div>
 
   <!-- ===== 표현(て형 파생) 연습 뷰 ===== -->
@@ -575,6 +576,45 @@ ruby rt {
 
   </div><!-- /mix-view -->
 
+  <!-- ===== 시제 연습 뷰 ===== -->
+  <div id="tense-view" style="display:none">
+
+    <div class="review-banner" id="tense-review-banner">
+      <span id="tense-review-banner-text">🕐 시제 복습 모드</span>
+      <button onclick="exitTenseReview(false)">복습 종료</button>
+    </div>
+
+    <div class="vcat-tabs" style="justify-content:center">
+      <button class="vcat-tab active" id="tp-both" onclick="setTensePolite('both')">반말+존댓말</button>
+      <button class="vcat-tab" id="tp-plain" onclick="setTensePolite('plain')">반말만</button>
+      <button class="vcat-tab" id="tp-polite" onclick="setTensePolite('polite')">존댓말만</button>
+    </div>
+
+    <div id="tense-progress" style="display:none;text-align:center;font-size:12px;color:#3b5bdb;font-weight:700;margin:2px 0 8px"></div>
+
+    <div class="card" id="tense-card">
+      <div class="card-top">
+        <span class="form-badge" id="tense-form-label">시제 만들기</span>
+        <button class="bookmark-btn" id="tense-bookmark-btn" onclick="toggleTenseBookmark()" title="시제 복습에 저장">🔖</button>
+      </div>
+      <div class="verb-display" id="tense-display"></div>
+      <div class="question-text" id="tense-question"></div>
+      <div class="input-row">
+        <input type="text" class="answer-input" id="tense-input"
+          placeholder="ひらがな 또는 한자..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <button class="submit-btn" id="tense-submit">확인</button>
+      </div>
+    </div>
+
+    <div class="result-card" id="tense-result">
+      <div class="result-title" id="tense-result-title"></div>
+      <div id="tense-result-body"></div>
+    </div>
+
+    <button class="next-btn" id="tense-next" style="display:none">다음 문제 →</button>
+
+  </div><!-- /tense-view -->
+
   <!-- Bottom bar -->
   <div class="bottom-bar">
     <button class="icon-btn" onclick="openReviewByMode()">🔖 복습 <span class="review-badge" id="review-badge"></span></button>
@@ -708,6 +748,18 @@ ruby rt {
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeModal('modal-conj-review')">닫기</button>
       <button class="btn-confirm" id="start-conj-review-btn" onclick="startConjReview()">복습 시작</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───── Tense Review Modal (시제) ───── -->
+<div class="modal-overlay" id="modal-tense-review">
+  <div class="modal">
+    <h2>🕐 시제 복습 목록</h2>
+    <div id="tense-review-list"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modal-tense-review')">닫기</button>
+      <button class="btn-confirm" id="start-tense-review-btn" onclick="startTenseReview()">복습 시작</button>
     </div>
   </div>
 </div>
@@ -1015,6 +1067,22 @@ let conjReviewMode = false, conjReviewQueue = [];
 // 활용 일반 연습 라운드: 전체 동사를 한 바퀴씩, 오답은 맞힐 때까지 반복
 let conjRoundQueue = [], conjRoundTotal = 0, conjRoundCurKey = null, conjRoundStarted = false, conjRoundSig = '';
 const ckey = (verb, fid) => verb.dict.k + '|' + fid;
+
+// ── 시제 연습 상태 (동사·명사·형용사의 시제×정중도) ──
+let tenseStats = { date: kstDateStr(), total:0, correct:0, streak:0, wrongMap:{} };
+try { const s = JSON.parse(localStorage.getItem('jp_tense_stats') || 'null'); if (s && s.date === kstDateStr()) tenseStats = s; } catch(e) {}
+function saveTenseStats() { localStorage.setItem('jp_tense_stats', JSON.stringify(tenseStats)); }
+function rolloverTenseStats() { if (tenseStats.date !== kstDateStr()) { tenseStats = { date: kstDateStr(), total:0, correct:0, streak:0, wrongMap:{} }; saveTenseStats(); } }
+let tenseReview = {};
+try { tenseReview = JSON.parse(localStorage.getItem('jp_tense_review') || '{}'); } catch(e) {}
+function saveTenseReview() { localStorage.setItem('jp_tense_review', JSON.stringify(tenseReview)); }
+let tenseReviewMode = false, tenseReviewQueue = [];
+let tenseRoundQueue = [], tenseRoundTotal = 0, tenseRoundCurKey = null, tenseRoundStarted = false, tenseRoundSig = '';
+let tenseCur = {};
+let tensePolite = 'both';
+try { tensePolite = localStorage.getItem('jp_tense_polite') || 'both'; } catch(e) {}
+const TENSE_LABEL = { nonpast:'현재/미래', past:'과거', prog:'현재진행' };
+const TENSE_TENSES = { verb:['nonpast','past','prog'], iadj:['nonpast','past'], noun:['nonpast','past'], naadj:['nonpast','past'] };
 
 // ── 섞어서(활용+표현 통합) 상태 ──
 let mixStats = { date: kstDateStr(), total:0, correct:0, streak:0, wrongMap:{} };
@@ -1898,7 +1966,7 @@ function deleteMemoItem(kind, key) {
 
 // ── Stats (현재 모드 기준) ──
 function openStats() {
-  appMode === 'memo' ? rolloverMemoStats() : appMode === 'conj' ? rolloverConjStats() : appMode === 'mix' ? rolloverMixStats() : rolloverStats();
+  appMode === 'memo' ? rolloverMemoStats() : appMode === 'conj' ? rolloverConjStats() : appMode === 'mix' ? rolloverMixStats() : appMode === 'tense' ? rolloverTenseStats() : rolloverStats();
   const s = activeStats();
   document.getElementById('st-total').textContent   = s.total;
   document.getElementById('st-correct').textContent = s.correct;
@@ -1978,8 +2046,8 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 // ═══════════════════════════════════════════════════
 const targetLabel = tid => { const d = DERIVATIVES.find(x=>x.id===tid); return d ? d.label : tid; };
 
-function activeStats() { return appMode === 'memo' ? memoStats : appMode === 'conj' ? conjStats : appMode === 'mix' ? mixStats : stats; }
-function activeReview() { return appMode === 'mix' ? {} : appMode === 'memo' ? memoReview : appMode === 'conj' ? conjReview : review; }
+function activeStats() { return appMode === 'memo' ? memoStats : appMode === 'conj' ? conjStats : appMode === 'mix' ? mixStats : appMode === 'tense' ? tenseStats : stats; }
+function activeReview() { return appMode === 'mix' ? {} : appMode === 'memo' ? memoReview : appMode === 'conj' ? conjReview : appMode === 'tense' ? tenseReview : review; }
 
 function updateReviewBadge() {
   const n = Object.keys(activeReview()).length;
@@ -1996,7 +2064,7 @@ function updateScoreDisplay() {
 // 복습 버튼: 현재 모드에 맞는 복습 목록 열기
 function openReviewByMode() {
   if (appMode === 'mix') { alert('섞어서 모드는 별도 복습 목록이 없어요.\n활용·표현 탭에서 각각 복습하세요.'); return; }
-  appMode === 'memo' ? openMemoReview() : appMode === 'conj' ? openConjReview() : openReview();
+  appMode === 'memo' ? openMemoReview() : appMode === 'conj' ? openConjReview() : appMode === 'tense' ? openTenseReview() : openReview();
 }
 
 function updateBookmarkBtn() {
@@ -2177,17 +2245,18 @@ function exitReview(completed) {
 function setMode(m) {
   if (appMode === m) return;
   appMode = m;
-  ['te','memo','conj','mix'].forEach(x => {
+  ['te','memo','conj','mix','tense'].forEach(x => {
     document.getElementById('tab-' + x).classList.toggle('active', m === x);
     document.getElementById(x + '-view').style.display = (m === x) ? '' : 'none';
   });
   updateReviewBadge();
   updateScoreDisplay();
   document.getElementById('add-btn').textContent = (m === 'memo') ? '＋ 표현' : '＋ 동사';
-  if (m === 'memo')      { if (!memoCur.verb) newMemoQuestion(); }
-  else if (m === 'conj') { if (!conjCur.verb) newConjQuestion(); }
-  else if (m === 'mix')  { if (!mixCur.verb)  newMixQuestion(); }
-  else                   { if (!cur.verb)     newQuestion(); }
+  if (m === 'memo')       { if (!memoCur.verb) newMemoQuestion(); }
+  else if (m === 'conj')  { if (!conjCur.verb) newConjQuestion(); }
+  else if (m === 'mix')   { if (!mixCur.verb)  newMixQuestion(); }
+  else if (m === 'tense') { if (!tenseCur.verb) newTenseQuestion(); }
+  else                    { if (!cur.verb)     newQuestion(); }
 }
 function openAddByMode() { appMode === 'memo' ? openVocab() : openAddVerb(); }
 
@@ -2646,6 +2715,223 @@ function exitConjReview(completed) {
 }
 
 // ═══════════════════════════════════════════════════
+// TENSE (시제: 동사·명사·형용사의 시제×정중도)
+// ═══════════════════════════════════════════════════
+function tensePos(v) { return !v.isVocab ? 'verb' : (v.pos || null); }   // 동사 / noun·iadj·naadj / null(활용없음)
+function tenseItems() { return [...allVerbs(), ...vocab].filter(v => !hidden.has(vkey(v)) && tensePos(v)); }
+function tensePolites() { return tensePolite === 'plain' ? ['반말'] : tensePolite === 'polite' ? ['존댓말'] : ['반말','존댓말']; }
+function tenseCellsFor(v) {
+  const ts = TENSE_TENSES[tensePos(v)] || [];
+  const out = [];
+  for (const t of ts) for (const p of tensePolites()) out.push({ tense:t, polite:p });
+  return out;
+}
+const tenseTargetLabel = c => `${TENSE_LABEL[c.tense]} · ${c.polite}`;
+// 품사×시제×정중도 → {k,h}
+function tenseForm(v, tense, polite) {
+  const pos = tensePos(v), k = v.dict.k, h = v.dict.h, P = polite === '존댓말';
+  if (pos === 'verb') {
+    if (tense === 'nonpast') return P ? v.masu : { k, h };
+    if (tense === 'past')    return P ? { k: v.masu.k.slice(0,-2)+'ました', h: v.masu.h.slice(0,-2)+'ました' } : v.ta;
+    return P ? { k: v.te.k+'います', h: v.te.h+'います' } : { k: v.te.k+'いる', h: v.te.h+'いる' };  // prog
+  }
+  if (pos === 'iadj') {
+    if (tense === 'nonpast') return P ? { k:k+'です', h:h+'です' } : { k, h };
+    const ii = (h === 'いい');   // いい는 불규칙(よかった). 良い(よい)는 정상 규칙
+    const stemH = ii ? 'よ' : h.slice(0,-1);
+    const stemK = ii ? (k === h ? 'よ' : k.slice(0,-1)) : k.slice(0,-1);
+    return P ? { k: stemK+'かったです', h: stemH+'かったです' } : { k: stemK+'かった', h: stemH+'かった' };
+  }
+  // noun / naadj
+  if (tense === 'nonpast') return P ? { k:k+'です', h:h+'です' } : { k:k+'だ', h:h+'だ' };
+  return P ? { k:k+'でした', h:h+'でした' } : { k:k+'だった', h:h+'だった' };
+}
+function tenseTrap(v, c) {
+  const pos = tensePos(v);
+  if (pos === 'iadj' && c.tense === 'past') {
+    if (v.dict.h === 'いい') return 'いい의 과거는 よかった (불규칙)';
+    if (c.polite === '존댓말') return 'い형용사 과거존댓말은 かったです (高いでした ✗)';
+  }
+  if (pos === 'verb' && c.tense === 'nonpast') return '미래도 기본형/ます 그대로 (전용 미래형 없음)';
+  if ((pos === 'noun' || pos === 'naadj') && c.tense === 'past') return '명사·な형 과거는 だった/でした';
+  return '';
+}
+function setTensePolite(p) {
+  tensePolite = p; try { localStorage.setItem('jp_tense_polite', p); } catch(e) {}
+  ['both','plain','polite'].forEach(x => document.getElementById('tp-'+x).classList.toggle('active', x === p));
+  tenseRoundSig = ''; newTenseQuestion();
+}
+function newTenseQuestion() {
+  rolloverTenseStats();
+  if (tenseReviewMode) { newTenseReviewQuestion(); return; }
+  const pool = tenseItems();
+  if (!pool.length) { tenseCur = {}; tenseEmpty(); updateTenseProgress(); return; }
+  const map = new Map(pool.map(v => [vkey(v), v]));
+  const sig = [...map.keys()].join('|') + '|' + tensePolite;
+  if (sig !== tenseRoundSig) { tenseRoundSig = sig; tenseRoundQueue = []; tenseRoundStarted = false; }
+  let key = null;
+  while (tenseRoundQueue.length) { const c = tenseRoundQueue.shift(); if (map.has(c)) { key = c; break; } }
+  if (!key) {
+    if (tenseRoundStarted) alert(`한 바퀴 완료! 🎉 전체 ${tenseRoundTotal}개를 다 풀었어요.\n새 라운드를 시작합니다.`);
+    tenseRoundQueue = shuffle(pool.map(vkey));
+    tenseRoundTotal = tenseRoundQueue.length;
+    tenseRoundStarted = true;
+    key = tenseRoundQueue.shift();
+  }
+  tenseRoundCurKey = key;
+  const v = map.get(key);
+  renderTense(v, rand(tenseCellsFor(v)));
+  updateTenseProgress();
+}
+function updateTenseProgress() {
+  const el = document.getElementById('tense-progress'); if (!el) return;
+  if (tenseReviewMode || !tenseRoundTotal || !tenseCur.verb) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.textContent = `📚 이번 라운드 남은 ${tenseRoundQueue.length + 1} / 전체 ${tenseRoundTotal}개`;
+}
+function handleTenseRoundWrong() { if (tenseRoundCurKey && !tenseRoundQueue.includes(tenseRoundCurKey)) tenseRoundQueue.push(tenseRoundCurKey); }
+function renderTense(v, cell) {
+  tenseCur = { verb:v, cell };
+  const pos = tensePos(v);
+  const posLbl = pos === 'verb' ? '동사' : pos === 'iadj' ? 'い형용사' : pos === 'naadj' ? 'な형용사' : '명사';
+  document.getElementById('tense-form-label').textContent = '시제 만들기';
+  document.getElementById('tense-display').innerHTML = ruby(v.dict.k, v.dict.h);
+  document.getElementById('tense-question').innerHTML =
+    `<b>${v.meaning}</b> <span style="font-size:11px;color:#3b5bdb;font-weight:700">[${posLbl}]</span> 를 아래 형태로 만들어 보세요.<br>` +
+    `<span class="target-badge">${tenseTargetLabel(cell)}</span>`;
+  const inp = document.getElementById('tense-input');
+  inp.value=''; inp.className='answer-input'; inp.disabled=false;
+  document.getElementById('tense-result').style.display='none';
+  document.getElementById('tense-result').className='result-card';
+  document.getElementById('tense-next').style.display='none';
+  document.getElementById('tense-submit').style.display='';
+  updateTenseBookmarkBtn();
+  inp.focus();
+}
+function tenseEmpty() {
+  tenseCur = {};
+  document.getElementById('tense-form-label').textContent = '안내';
+  document.getElementById('tense-display').innerHTML = '🚫';
+  document.getElementById('tense-question').innerHTML = '출제할 항목이 없어요. 동사를 켜거나, <b>＋ 표현</b>에서 명사·형용사에 <b>품사</b>를 지정해 주세요.';
+  const inp = document.getElementById('tense-input'); inp.value=''; inp.disabled=true;
+  document.getElementById('tense-submit').style.display='none';
+  document.getElementById('tense-next').style.display='none';
+  document.getElementById('tense-result').style.display='none';
+}
+function checkTenseAnswer() {
+  const inp = document.getElementById('tense-input');
+  const user = norm(inp.value);
+  if (!user) { inp.focus(); return; }
+  const { verb, cell } = tenseCur;
+  const ans = tenseForm(verb, cell.tense, cell.polite);
+  const variants = tensePos(verb) === 'verb' ? verbReadingVariants(verb) : [verb];
+  const ok = variants.some(vr => { const a = tenseForm(vr, cell.tense, cell.polite); return a && (user === norm(a.h) || user === norm(a.k)); });
+  tenseStats.total++;
+  bumpVerbStat(verb, ok);
+  inp.disabled = true;
+  document.getElementById('tense-submit').style.display='none';
+  document.getElementById('tense-next').style.display='';
+  const rc = document.getElementById('tense-result'); rc.style.display='block';
+  const warn = tenseTrap(verb, cell);
+  const answerHtml = `<div class="correct-answer">${ruby(ans.k, ans.h)}</div>` +
+    `<div class="explanation">${ruby(verb.dict.k, verb.dict.h)} (${verb.meaning}) 의 <b>${tenseTargetLabel(cell)}</b>${warn ? `<span class="note-warn">${warn}</span>` : ''}</div>`;
+  if (ok) {
+    tenseStats.correct++; tenseStats.streak++;
+    if (tenseReviewMode) handleTenseReviewCorrect();
+    inp.className='answer-input correct'; rc.className='result-card correct';
+    document.getElementById('tense-result-title').className='result-title correct';
+    document.getElementById('tense-result-title').textContent='✅ 정답!';
+    document.getElementById('tense-result-body').innerHTML = answerHtml;
+  } else {
+    tenseStats.streak=0;
+    tenseStats.wrongMap[vkey(verb)] = (tenseStats.wrongMap[vkey(verb)] || { k:verb.dict.k, h:verb.dict.h, cnt:0 });
+    tenseStats.wrongMap[vkey(verb)].cnt++;
+    addTenseWrong(verb);
+    if (tenseReviewMode) handleTenseReviewWrong(); else handleTenseRoundWrong();
+    inp.className='answer-input wrong'; rc.className='result-card wrong';
+    document.getElementById('tense-result-title').className='result-title wrong';
+    document.getElementById('tense-result-title').textContent='❌ 오답';
+    document.getElementById('tense-result-body').innerHTML = `<div style="font-size:12px;color:#999;margin-bottom:2px">정답</div>` + answerHtml;
+  }
+  updateScoreDisplay(); saveTenseStats();
+}
+// ── 시제 복습(별도, 단어 단위) ──
+function updateTenseBookmarkBtn() {
+  const btn = document.getElementById('tense-bookmark-btn');
+  if (!tenseCur.verb) { btn.textContent='🔖'; btn.style.opacity=0.55; return; }
+  const it = tenseReview[vkey(tenseCur.verb)];
+  const marked = !!(it && it.m);
+  btn.textContent = marked ? '⭐' : '🔖'; btn.style.opacity = marked ? 1 : 0.55;
+}
+function addTenseWrong(v) {
+  const k = vkey(v);
+  if (!tenseReview[k]) tenseReview[k] = { v, w:1, m:false }; else tenseReview[k].w = 1;
+  saveTenseReview(); updateReviewBadge();
+}
+function toggleTenseBookmark() {
+  if (!tenseCur.verb) return;
+  const k = vkey(tenseCur.verb), it = tenseReview[k];
+  if (it && it.m) delete tenseReview[k];              // ⭐ 해제 = 완전 제거
+  else if (it) it.m = true;
+  else tenseReview[k] = { v:tenseCur.verb, w:0, m:true };
+  saveTenseReview(); updateTenseBookmarkBtn(); updateReviewBadge();
+}
+function handleTenseReviewCorrect() {
+  const k = vkey(tenseCur.verb), it = tenseReview[k];
+  if (it && !it.m) { delete tenseReview[k]; saveTenseReview(); }
+  tenseReviewQueue = tenseReviewQueue.filter(x => x !== k);
+  updateReviewBadge();
+}
+function handleTenseReviewWrong() {
+  const k = vkey(tenseCur.verb);
+  if (tenseReview[k] && !tenseReviewQueue.includes(k)) tenseReviewQueue.push(k);
+}
+function openTenseReview() { renderTenseReviewList(); document.getElementById('modal-tense-review').classList.add('open'); }
+function renderTenseReviewList() {
+  const keys = Object.keys(tenseReview);
+  const list = document.getElementById('tense-review-list');
+  const startBtn = document.getElementById('start-tense-review-btn');
+  if (!keys.length) {
+    list.innerHTML = '<div class="empty-msg">저장된 시제 복습이 없어요.<br>틀리거나 🔖로 저장하면 여기에 모입니다.</div>';
+    startBtn.style.display='none'; return;
+  }
+  startBtn.style.display='';
+  const rows = keys.map(k => ({ k, ...tenseReview[k] })).sort((a,b) => (b.w - a.w) || (b.m - a.m));
+  list.innerHTML = rows.map(r => {
+    const tags=[]; if (r.w) tags.push(`<span class="rv-tag-wrong">❌ 오답</span>`); if (r.m) tags.push(`<span class="rv-tag-mark">⭐ 저장</span>`);
+    return `<div class="review-row"><div>
+      <div class="rv-main">${ruby(r.v.dict.k, r.v.dict.h)} <span style="color:#888;font-weight:400">${r.v.meaning}</span></div>
+      <div class="rv-sub">🎲 시제 랜덤 출제 &nbsp;·&nbsp; ${tags.join(' &nbsp; ')}</div>
+    </div><button class="rv-del" onclick="removeTenseReviewItem('${r.k}')" title="삭제">🗑️</button></div>`;
+  }).join('');
+}
+function removeTenseReviewItem(k) { delete tenseReview[k]; saveTenseReview(); tenseReviewQueue = tenseReviewQueue.filter(x => x !== k); renderTenseReviewList(); updateReviewBadge(); }
+function startTenseReview() {
+  const keys = Object.keys(tenseReview);
+  if (!keys.length) return;
+  tenseReviewQueue = shuffle(keys.slice());
+  tenseReviewMode = true;
+  closeModal('modal-tense-review');
+  document.getElementById('tense-review-banner').classList.add('on');
+  document.getElementById('tense-progress').style.display = 'none';
+  newTenseQuestion();
+}
+function newTenseReviewQuestion() {
+  let k = null;
+  while (tenseReviewQueue.length) { const c = tenseReviewQueue.shift(); if (tenseReview[c]) { k = c; break; } }
+  if (!k) { exitTenseReview(true); return; }
+  const it = tenseReview[k];
+  document.getElementById('tense-review-banner-text').textContent = `🕐 시제 복습 · 남은 ${tenseReviewQueue.length + 1}개`;
+  renderTense(it.v, rand(tenseCellsFor(it.v)));
+}
+function exitTenseReview(completed) {
+  tenseReviewMode = false; tenseReviewQueue = [];
+  document.getElementById('tense-review-banner').classList.remove('on');
+  if (completed) { const left = Object.keys(tenseReview).length; alert(`시제 복습 완료! 🎉\n다음 복습 대상 ${left}개 남음.`); }
+  newTenseQuestion();
+}
+
+// ═══════════════════════════════════════════════════
 // MIX (섞어서: 활용 12형 + 표현 8종 통합 출제)
 // ═══════════════════════════════════════════════════
 // 설정에서 켜둔 활용형(conjSettings) + 표현(settings.derivs)을 한 풀로 합쳐 랜덤 출제.
@@ -2830,6 +3116,11 @@ document.getElementById('conj-next').addEventListener('click', newConjQuestion);
 document.getElementById('mix-submit').addEventListener('click', checkMixAnswer);
 document.getElementById('mix-input').addEventListener('keydown', e => { if (e.key === 'Enter') checkMixAnswer(); });
 document.getElementById('mix-next').addEventListener('click', newMixQuestion);
+
+document.getElementById('tense-submit').addEventListener('click', checkTenseAnswer);
+document.getElementById('tense-input').addEventListener('keydown', e => { if (e.key === 'Enter') checkTenseAnswer(); });
+document.getElementById('tense-next').addEventListener('click', newTenseQuestion);
+if (tensePolite !== 'both') { const el = document.getElementById('tp-'+tensePolite); if (el) { document.getElementById('tp-both').classList.remove('active'); el.classList.add('active'); } }
 
 document.getElementById('v-k').addEventListener('input', updateVocabPreview);
 document.getElementById('v-h').addEventListener('input', () => { vAutoH = false; });
