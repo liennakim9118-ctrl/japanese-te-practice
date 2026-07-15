@@ -1762,6 +1762,7 @@ function openItemDetail(key) {
   if (!o) { closeModal('modal-item'); return; }
   const v = o.v, isVerb = o.kind === '동사';
   const rv = memoReview[key], starred = !!(rv && rv.m);
+  const inReview = !!(memoReview[key] || review[key] || conjReview[key] || tenseReview[key]);
   const esc = s => (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
   let h = `<h2 style="margin-bottom:2px">${ruby(v.dict.k, v.dict.h)}</h2>`;
   h += `<div style="font-size:12px;color:#888;margin-bottom:14px">${isVerb ? '동사' : posLabel(v.pos)}${o.del ? ' · 내가 추가' : ' · 내장'}</div>`;
@@ -1774,6 +1775,7 @@ function openItemDetail(key) {
   h += `<button class="btn-confirm" style="width:100%" onclick="saveItemEdit('${key}')">수정 저장</button>`;
   h += `<div class="section-title" style="margin-top:16px">동작</div><div style="display:flex;flex-direction:column;gap:6px">`;
   h += `<button class="detail-act" onclick="toggleStarFromList('${key}');openItemDetail('${key}')">${starred ? '⭐ 복습에서 제외' : '☆ 복습에 추가'}${isVerb ? ' (て형·활용·암기)' : ''}</button>`;
+  if (inReview) h += `<button class="detail-act" style="color:#e53935" onclick="purgeFromReviews('${key}');openItemDetail('${key}')">🚫 모든 복습에서 빼기 (⭐·❌ 전부, 암기·활용·て형·시제)</button>`;
   if (isVerb) h += `<button class="detail-act" onclick="toggleConjInclude('${key}');openItemDetail('${key}')">${!disabledVerbs.has(key) ? '☑︎ 활용·て형 연습 포함됨 → 빼기' : '☐ 활용·て형 연습 제외됨 → 넣기'}</button>`;
   if (o.kind === '표현' && !v.pos) h += `<button class="detail-act" onclick="convertVocabToVerb('${key}');closeModal('modal-item')">→ 동사로 전환 (활용 연습 가능)</button>`;
   h += `<button class="detail-act" onclick="toggleHidden('${key}');closeModal('modal-item')">🙈 숨기기 (모든 연습 제외)</button>`;
@@ -2092,9 +2094,9 @@ function toggleStar(v) {
   const key = vkey(v);
   const isVerb = allVerbs().some(x => vkey(x) === key);
   const on = !(memoReview[key] && memoReview[key].m);   // 현재 ⭐ 상태 반전
-  const targets = isVerb
-    ? [[memoReview, saveMemoReview], [review, saveReview], [conjReview, saveConjReview]]
-    : [[memoReview, saveMemoReview]];
+  const targets = [[memoReview, saveMemoReview]];
+  if (isVerb) { targets.push([review, saveReview], [conjReview, saveConjReview]); }
+  if (tensePos(v)) targets.push([tenseReview, saveTenseReview]);   // 시제 대상(동사·명사·형용사)이면 시제 복습도 함께
   targets.forEach(([L, save]) => {
     if (on) { if (L[key]) L[key].m = true; else L[key] = { v, w: 0, m: true }; }
     else if (L[key]) delete L[key];   // ⭐ 해제 = 복습 목록에서 완전히 제거(오답 기록 포함)
@@ -2105,6 +2107,7 @@ function toggleStar(v) {
     reviewQueue = reviewQueue.filter(x => x !== key);
     conjReviewQueue = conjReviewQueue.filter(x => x !== key);
     memoReviewQueue = memoReviewQueue.filter(x => x !== key);
+    tenseReviewQueue = tenseReviewQueue.filter(x => x !== key);
   }
   updateReviewBadge();
 }
@@ -2117,11 +2120,12 @@ function toggleBookmark() {
 
 // 특정 단어 키를 모든 복습 목록·큐에서 제거 (단어 삭제 시 유령 항목 방지)
 function purgeFromReviews(key) {
-  delete memoReview[key]; delete review[key]; delete conjReview[key];
-  saveMemoReview(); saveReview(); saveConjReview();
+  delete memoReview[key]; delete review[key]; delete conjReview[key]; delete tenseReview[key];
+  saveMemoReview(); saveReview(); saveConjReview(); saveTenseReview();
   memoReviewQueue = memoReviewQueue.filter(x => x !== key);
-  reviewQueue     = reviewQueue.filter(x => x !== key);
-  conjReviewQueue = conjReviewQueue.filter(x => x !== key);
+  reviewQueue      = reviewQueue.filter(x => x !== key);
+  conjReviewQueue  = conjReviewQueue.filter(x => x !== key);
+  tenseReviewQueue = tenseReviewQueue.filter(x => x !== key);
   updateReviewBadge();
 }
 
