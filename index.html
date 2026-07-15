@@ -2176,7 +2176,6 @@ function renderReviewList() {
   list.innerHTML = rows.map(r => {
     const v = r.v;
     const tags = [];
-    if (r.w) tags.push(`<span class="rv-tag-wrong">❌ 오답</span>`);
     if (r.m) tags.push(`<span class="rv-tag-mark">⭐ 저장</span>`);
     return `<div class="review-row">
       <div>
@@ -2482,7 +2481,7 @@ function renderMemoReviewList() {
   startBtn.style.display='';
   const rows = keys.map(k => ({ k, ...memoReview[k] })).sort((a,b) => (b.w - a.w) || (b.m - a.m));
   list.innerHTML = rows.map(r => {
-    const tags=[]; if (r.w) tags.push(`<span class="rv-tag-wrong">❌ 오답</span>`); if (r.m) tags.push(`<span class="rv-tag-mark">⭐ 저장</span>`);
+    const tags=[]; if (r.m) tags.push(`<span class="rv-tag-mark">⭐ 저장</span>`);
     return `<div class="review-row"><div>
       <div class="rv-main">${ruby(r.v.dict.k, r.v.dict.h)} <span style="color:#888;font-weight:400">${r.v.meaning}</span></div>
       <div class="rv-sub">${tags.join(' &nbsp; ')}</div>
@@ -2683,7 +2682,7 @@ function renderConjReviewList() {
   startBtn.style.display='';
   const rows = keys.map(k => ({ k, ...conjReview[k] })).sort((a,b) => (b.w - a.w) || (b.m - a.m));
   list.innerHTML = rows.map(r => {
-    const tags=[]; if (r.w) tags.push(`<span class="rv-tag-wrong">❌ 오답</span>`); if (r.m) tags.push(`<span class="rv-tag-mark">⭐ 저장</span>`);
+    const tags=[]; if (r.m) tags.push(`<span class="rv-tag-mark">⭐ 저장</span>`);
     return `<div class="review-row"><div>
       <div class="rv-main">${ruby(r.v.dict.k, r.v.dict.h)} <span style="color:#888;font-weight:400">${r.v.meaning}</span></div>
       <div class="rv-sub">🎲 활용 랜덤 출제 &nbsp;·&nbsp; ${tags.join(' &nbsp; ')}</div>
@@ -2907,7 +2906,7 @@ function renderTenseReviewList() {
   startBtn.style.display='';
   const rows = keys.map(k => ({ k, ...tenseReview[k] })).sort((a,b) => (b.w - a.w) || (b.m - a.m));
   list.innerHTML = rows.map(r => {
-    const tags=[]; if (r.w) tags.push(`<span class="rv-tag-wrong">❌ 오답</span>`); if (r.m) tags.push(`<span class="rv-tag-mark">⭐ 저장</span>`);
+    const tags=[]; if (r.m) tags.push(`<span class="rv-tag-mark">⭐ 저장</span>`);
     return `<div class="review-row"><div>
       <div class="rv-main">${ruby(r.v.dict.k, r.v.dict.h)} <span style="color:#888;font-weight:400">${r.v.meaning}</span></div>
       <div class="rv-sub">🎲 시제 랜덤 출제 &nbsp;·&nbsp; ${tags.join(' &nbsp; ')}</div>
