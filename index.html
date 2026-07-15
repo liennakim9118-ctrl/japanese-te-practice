@@ -1216,6 +1216,15 @@ if (!localStorage.getItem('jp_review_prune_v1')) {
   localStorage.setItem('jp_review_prune_v1', '1');
 }
 
+// 오답 자동수집 폐지(2026-07): 별표 안 된(m=false) 자동수집 ❌ 항목을 복습에서 1회 정리 → 복습 = ⭐ 저장분만
+if (!localStorage.getItem('jp_no_autocollect_v1')) {
+  for (const [L, save] of [[memoReview,saveMemoReview],[review,saveReview],[conjReview,saveConjReview],[tenseReview,saveTenseReview]]) {
+    for (const k of Object.keys(L)) if (!L[k].m) delete L[k];
+    save();
+  }
+  localStorage.setItem('jp_no_autocollect_v1', '1');
+}
+
 // 동사(내장·커스텀) 뜻·예문 수정값 오버라이드 (동사는 코드/별도 저장이라 편집분을 여기에 보관 후 로드 시 덮어씀)
 let itemOverrides = {};
 try { itemOverrides = JSON.parse(localStorage.getItem('jp_item_overrides') || '{}'); } catch(e) {}
@@ -1360,7 +1369,6 @@ function checkAnswer() {
     stats.streak = 0;
     stats.wrongMap[vkey(verb)] = (stats.wrongMap[vkey(verb)] || { k: verb.dict.k, h: verb.dict.h, cnt:0 });
     stats.wrongMap[vkey(verb)].cnt++;
-    addWrong(verb, target);
     if (reviewMode) handleReviewWrong(); else handleTeRoundWrong();
     inp.className = 'answer-input wrong';
     rc.className = 'result-card wrong';
@@ -2158,7 +2166,7 @@ function renderReviewList() {
   const list = document.getElementById('review-list');
   const startBtn = document.getElementById('start-review-btn');
   if (!keys.length) {
-    list.innerHTML = '<div class="empty-msg">아직 저장된 복습 문제가 없어요.<br>문제를 <b>틀리거나</b> 🔖 버튼으로 <b>저장</b>하면 여기에 모입니다.</div>';
+    list.innerHTML = '<div class="empty-msg">아직 저장된 복습 문제가 없어요.<br>🔖 버튼으로 <b>저장</b>하면 여기에 모입니다.</div>';
     startBtn.style.display = 'none';
     return;
   }
@@ -2388,7 +2396,6 @@ function checkMemoAnswer() {
     memoStats.streak=0;
     memoStats.wrongMap[vkey(verb)] = (memoStats.wrongMap[vkey(verb)] || { k:verb.dict.k, h:verb.dict.h, cnt:0 });
     memoStats.wrongMap[vkey(verb)].cnt++;
-    addMemoWrong(verb);
     if (memoReviewMode) handleMemoReviewWrong(); else handleMemoRoundWrong();
     inp.className='answer-input wrong';
     rc.className='result-card wrong';
@@ -2469,7 +2476,7 @@ function renderMemoReviewList() {
   const list = document.getElementById('memo-review-list');
   const startBtn = document.getElementById('start-memo-review-btn');
   if (!keys.length) {
-    list.innerHTML = '<div class="empty-msg">저장된 암기 복습이 없어요.<br>틀리거나 🔖로 저장하면 여기에 모입니다.</div>';
+    list.innerHTML = '<div class="empty-msg">저장된 암기 복습이 없어요.<br>🔖로 저장하면 여기에 모입니다.</div>';
     startBtn.style.display='none'; return;
   }
   startBtn.style.display='';
@@ -2619,7 +2626,6 @@ function checkConjAnswer() {
     conjStats.streak=0;
     conjStats.wrongMap[ckey(verb,fid)] = (conjStats.wrongMap[ckey(verb,fid)] || { k:verb.dict.k, h:verb.dict.h, cnt:0 });
     conjStats.wrongMap[ckey(verb,fid)].cnt++;
-    addConjWrong(verb, fid);
     if (conjReviewMode) handleConjReviewWrong(); else handleConjRoundWrong();
     inp.className='answer-input wrong';
     rc.className='result-card wrong';
@@ -2671,7 +2677,7 @@ function renderConjReviewList() {
   const list = document.getElementById('conj-review-list');
   const startBtn = document.getElementById('start-conj-review-btn');
   if (!keys.length) {
-    list.innerHTML = '<div class="empty-msg">저장된 활용 복습이 없어요.<br>틀리거나 🔖로 저장하면 여기에 모입니다.</div>';
+    list.innerHTML = '<div class="empty-msg">저장된 활용 복습이 없어요.<br>🔖로 저장하면 여기에 모입니다.</div>';
     startBtn.style.display='none'; return;
   }
   startBtn.style.display='';
@@ -2850,7 +2856,6 @@ function checkTenseAnswer() {
     tenseStats.streak=0;
     tenseStats.wrongMap[vkey(verb)] = (tenseStats.wrongMap[vkey(verb)] || { k:verb.dict.k, h:verb.dict.h, cnt:0 });
     tenseStats.wrongMap[vkey(verb)].cnt++;
-    addTenseWrong(verb);
     if (tenseReviewMode) handleTenseReviewWrong(); else handleTenseRoundWrong();
     inp.className='answer-input wrong'; rc.className='result-card wrong';
     document.getElementById('tense-result-title').className='result-title wrong';
@@ -2896,7 +2901,7 @@ function renderTenseReviewList() {
   const list = document.getElementById('tense-review-list');
   const startBtn = document.getElementById('start-tense-review-btn');
   if (!keys.length) {
-    list.innerHTML = '<div class="empty-msg">저장된 시제 복습이 없어요.<br>틀리거나 🔖로 저장하면 여기에 모입니다.</div>';
+    list.innerHTML = '<div class="empty-msg">저장된 시제 복습이 없어요.<br>🔖로 저장하면 여기에 모입니다.</div>';
     startBtn.style.display='none'; return;
   }
   startBtn.style.display='';
