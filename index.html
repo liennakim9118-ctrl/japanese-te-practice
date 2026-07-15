@@ -1225,6 +1225,15 @@ if (!localStorage.getItem('jp_no_autocollect_v1')) {
   localStorage.setItem('jp_no_autocollect_v1', '1');
 }
 
+// 숨김(🙈)한 단어는 복습에서도 제외 — 예전에 숨김+⭐ 상태로 복습에 남아있던 항목 1회 정리
+if (!localStorage.getItem('jp_hidden_purge_v1')) {
+  for (const [L, save] of [[memoReview,saveMemoReview],[review,saveReview],[conjReview,saveConjReview],[tenseReview,saveTenseReview]]) {
+    for (const k of Object.keys(L)) if (hidden.has(k)) delete L[k];
+    save();
+  }
+  localStorage.setItem('jp_hidden_purge_v1', '1');
+}
+
 // 동사(내장·커스텀) 뜻·예문 수정값 오버라이드 (동사는 코드/별도 저장이라 편집분을 여기에 보관 후 로드 시 덮어씀)
 let itemOverrides = {};
 try { itemOverrides = JSON.parse(localStorage.getItem('jp_item_overrides') || '{}'); } catch(e) {}
@@ -1950,8 +1959,10 @@ function toggleConjInclude(key) {
 }
 // 숨김 토글 (모든 연습에서 제외)
 function toggleHidden(key) {
-  hidden.has(key) ? hidden.delete(key) : hidden.add(key);
+  const nowHidden = !hidden.has(key);
+  nowHidden ? hidden.add(key) : hidden.delete(key);
   localStorage.setItem('jp_hidden', JSON.stringify([...hidden]));
+  if (nowHidden) purgeFromReviews(key);   // 숨김 = 모든 연습 제외 → 복습에서도 완전히 빼기
   verbSetDirty = true; vocabDirty = true;
   renderVocabList(); renderHiddenList();
 }
