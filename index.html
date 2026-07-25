@@ -906,6 +906,8 @@ const CONJ_FORMS = [
   { id:'nagara',    label:'동시동작 (~ながら)',     nuance:'~하면서' },
   { id:'nasai',     label:'지시 (~なさい)',        nuance:'~해라 (부드러운 지시)' },
   { id:'tari',      label:'열거 (~たり)',          nuance:'~하기도 하고' },
+  { id:'nakunaru',  label:'변화 부정 (~なくなる)',   nuance:'~하지 않게 되다' },
+  { id:'youni',     label:'변화 (~ようになる)',     nuance:'~하게 되다' },
 ];
 const E_ROW = {'う':'え','く':'け','ぐ':'げ','す':'せ','つ':'て','ぬ':'ね','ぶ':'べ','む':'め','る':'れ'};
 const O_ROW = {'う':'お','く':'こ','ぐ':'ご','す':'そ','つ':'と','ぬ':'の','ぶ':'ぼ','む':'も','る':'ろ'};
@@ -930,6 +932,9 @@ function conjForm(verb, id) {
   if (id === 'tari')      return { k: verb.ta.k + 'り', h: verb.ta.h + 'り' };
   // ない형 기반: 부정 요청
   if (id === 'naide_kudasai') return { k: verb.nai.k + 'でください', h: verb.nai.h + 'でください' };
+  // 변화 ~なる: 부정변화(ない형에서 い→くなる)·긍정변화(기본형+ようになる)
+  if (id === 'nakunaru') return { k: verb.nai.k.slice(0,-1) + 'くなる', h: verb.nai.h.slice(0,-1) + 'くなる' };
+  if (id === 'youni')    return { k: verb.dict.k + 'ようになる', h: verb.dict.h + 'ようになる' };
   const dk = verb.dict.k, dh = verb.dict.h, g = verb.group;
   if (g === 3) {
     if (dh.endsWith('する')) {
