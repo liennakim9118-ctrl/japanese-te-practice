@@ -549,12 +549,18 @@ ruby rt {
   <!-- ===== 섞어서(활용+표현 통합) 뷰 ===== -->
   <div id="mix-view" style="display:none">
 
+    <div class="review-banner" id="mix-review-banner">
+      <span id="mix-review-banner-text">🎲 섞어서 복습 모드</span>
+      <button onclick="exitMixReview(false)">복습 종료</button>
+    </div>
+
     <div style="text-align:center;font-size:12px;color:#3b5bdb;font-weight:700;margin:2px 0 2px">🎲 활용 + 표현 섞어서 (기본형 → 최종형)</div>
     <div id="mix-progress" style="display:none;text-align:center;font-size:12px;color:#3b5bdb;font-weight:700;margin:2px 0 8px"></div>
 
     <div class="card" id="mix-card">
       <div class="card-top">
         <span class="form-badge" id="mix-form-label">섞어서</span>
+        <button class="bookmark-btn" id="mix-bookmark-btn" onclick="toggleMixBookmark()" title="섞어서 복습에 저장">🔖</button>
       </div>
       <div class="verb-display" id="mix-display"></div>
       <div class="question-text" id="mix-question"></div>
@@ -746,6 +752,18 @@ ruby rt {
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeModal('modal-conj-review')">닫기</button>
       <button class="btn-confirm" id="start-conj-review-btn" onclick="startConjReview()">복습 시작</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───── Mix Review Modal (섞어서) ───── -->
+<div class="modal-overlay" id="modal-mix-review">
+  <div class="modal">
+    <h2>🎲 섞어서 복습 목록</h2>
+    <div id="mix-review-list"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modal-mix-review')">닫기</button>
+      <button class="btn-confirm" id="start-mix-review-btn" onclick="startMixReview()">복습 시작</button>
     </div>
   </div>
 </div>
@@ -1102,6 +1120,11 @@ try { const s = JSON.parse(localStorage.getItem('jp_mix_stats') || 'null'); if (
 function saveMixStats() { localStorage.setItem('jp_mix_stats', JSON.stringify(mixStats)); }
 function rolloverMixStats() { if (mixStats.date !== kstDateStr()) { mixStats = { date: kstDateStr(), total:0, correct:0, streak:0, wrongMap:{} }; saveMixStats(); } }
 let mixCur = {};
+// 섞어서 복습(별도, 단어 단위)
+let mixReview = {};
+try { mixReview = JSON.parse(localStorage.getItem('jp_mix_review') || '{}'); } catch(e) {}
+function saveMixReview() { localStorage.setItem('jp_mix_review', JSON.stringify(mixReview)); }
+let mixReviewMode = false, mixReviewQueue = [];
 // 섞어서 일반 연습 라운드: 전체 동사를 한 바퀴씩, 오답은 맞힐 때까지 반복
 let mixRoundQueue = [], mixRoundTotal = 0, mixRoundCurKey = null, mixRoundStarted = false, mixRoundSig = '';
 
@@ -2084,7 +2107,7 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 const targetLabel = tid => { const d = DERIVATIVES.find(x=>x.id===tid); return d ? d.label : tid; };
 
 function activeStats() { return appMode === 'memo' ? memoStats : appMode === 'conj' ? conjStats : appMode === 'mix' ? mixStats : appMode === 'tense' ? tenseStats : stats; }
-function activeReview() { return appMode === 'mix' ? {} : appMode === 'memo' ? memoReview : appMode === 'conj' ? conjReview : appMode === 'tense' ? tenseReview : review; }
+function activeReview() { return appMode === 'mix' ? mixReview : appMode === 'memo' ? memoReview : appMode === 'conj' ? conjReview : appMode === 'tense' ? tenseReview : review; }
 
 function updateReviewBadge() {
   const n = Object.keys(activeReview()).length;
@@ -2100,8 +2123,7 @@ function updateScoreDisplay() {
 
 // 복습 버튼: 현재 모드에 맞는 복습 목록 열기
 function openReviewByMode() {
-  if (appMode === 'mix') { alert('섞어서 모드는 별도 복습 목록이 없어요.\n활용·표현 탭에서 각각 복습하세요.'); return; }
-  appMode === 'memo' ? openMemoReview() : appMode === 'conj' ? openConjReview() : appMode === 'tense' ? openTenseReview() : openReview();
+  appMode === 'memo' ? openMemoReview() : appMode === 'conj' ? openConjReview() : appMode === 'tense' ? openTenseReview() : appMode === 'mix' ? openMixReview() : openReview();
 }
 
 function updateBookmarkBtn() {
@@ -2130,7 +2152,7 @@ function toggleStar(v) {
   const isVerb = allVerbs().some(x => vkey(x) === key);
   const on = !(memoReview[key] && memoReview[key].m);   // 현재 ⭐ 상태 반전
   const targets = [[memoReview, saveMemoReview]];
-  if (isVerb) { targets.push([review, saveReview], [conjReview, saveConjReview]); }
+  if (isVerb) { targets.push([review, saveReview], [conjReview, saveConjReview], [mixReview, saveMixReview]); }  // 동사면 て형·활용·섞어서도
   if (tensePos(v)) targets.push([tenseReview, saveTenseReview]);   // 시제 대상(동사·명사·형용사)이면 시제 복습도 함께
   targets.forEach(([L, save]) => {
     if (on) { if (L[key]) L[key].m = true; else L[key] = { v, w: 0, m: true }; }
@@ -2143,6 +2165,7 @@ function toggleStar(v) {
     conjReviewQueue = conjReviewQueue.filter(x => x !== key);
     memoReviewQueue = memoReviewQueue.filter(x => x !== key);
     tenseReviewQueue = tenseReviewQueue.filter(x => x !== key);
+    mixReviewQueue = mixReviewQueue.filter(x => x !== key);
   }
   updateReviewBadge();
 }
@@ -2155,12 +2178,13 @@ function toggleBookmark() {
 
 // 특정 단어 키를 모든 복습 목록·큐에서 제거 (단어 삭제 시 유령 항목 방지)
 function purgeFromReviews(key) {
-  delete memoReview[key]; delete review[key]; delete conjReview[key]; delete tenseReview[key];
-  saveMemoReview(); saveReview(); saveConjReview(); saveTenseReview();
+  delete memoReview[key]; delete review[key]; delete conjReview[key]; delete tenseReview[key]; delete mixReview[key];
+  saveMemoReview(); saveReview(); saveConjReview(); saveTenseReview(); saveMixReview();
   memoReviewQueue = memoReviewQueue.filter(x => x !== key);
   reviewQueue      = reviewQueue.filter(x => x !== key);
   conjReviewQueue  = conjReviewQueue.filter(x => x !== key);
   tenseReviewQueue = tenseReviewQueue.filter(x => x !== key);
+  mixReviewQueue   = mixReviewQueue.filter(x => x !== key);
   updateReviewBadge();
 }
 
@@ -3013,6 +3037,7 @@ function mixConjSiblings(verb, target) {
 }
 function newMixQuestion() {
   rolloverMixStats();
+  if (mixReviewMode) { newMixReviewQuestion(); return; }
   const pool = quizVerbs();
   const targets = mixTargets();
   if (!pool.length) { mixCur = {}; mixEmpty(); updateMixProgress(); return; }
@@ -3038,7 +3063,7 @@ function newMixQuestion() {
 function updateMixProgress() {
   const el = document.getElementById('mix-progress');
   if (!el) return;
-  if (!mixRoundTotal || !mixCur.verb) { el.style.display = 'none'; return; }
+  if (mixReviewMode || !mixRoundTotal || !mixCur.verb) { el.style.display = 'none'; return; }
   el.style.display = '';
   el.textContent = `📚 이번 라운드 남은 ${mixRoundQueue.length + 1} / 전체 ${mixRoundTotal}개`;
 }
@@ -3065,6 +3090,7 @@ function renderMix(verb, target) {
   document.getElementById('mix-result').className='result-card';
   document.getElementById('mix-next').style.display='none';
   document.getElementById('mix-submit').style.display='';
+  updateMixBookmarkBtn();
   inp.focus();
 }
 function mixEmpty(msg) {
@@ -3117,6 +3143,7 @@ function checkMixAnswer() {
 
   if (ok) {
     mixStats.correct++; mixStats.streak++;
+    if (mixReviewMode) handleMixReviewCorrect();
     inp.className='answer-input correct';
     rc.className='result-card correct';
     document.getElementById('mix-result-title').className='result-title correct';
@@ -3126,7 +3153,7 @@ function checkMixAnswer() {
     mixStats.streak=0;
     mixStats.wrongMap[vkey(verb)] = (mixStats.wrongMap[vkey(verb)] || { k:verb.dict.k, h:verb.dict.h, cnt:0 });
     mixStats.wrongMap[vkey(verb)].cnt++;
-    handleMixRoundWrong();
+    if (mixReviewMode) handleMixReviewWrong(); else handleMixRoundWrong();
     inp.className='answer-input wrong';
     rc.className='result-card wrong';
     document.getElementById('mix-result-title').className='result-title wrong';
@@ -3136,6 +3163,76 @@ function checkMixAnswer() {
   }
   updateScoreDisplay();
   saveMixStats();
+}
+
+// ── 섞어서 복습(별도, 단어 단위) ──
+function updateMixBookmarkBtn() {
+  const btn = document.getElementById('mix-bookmark-btn');
+  if (!btn) return;
+  if (!mixCur.verb) { btn.textContent='🔖'; btn.style.opacity=0.55; return; }
+  const it = mixReview[vkey(mixCur.verb)];
+  const marked = !!(it && it.m);
+  btn.textContent = marked ? '⭐' : '🔖'; btn.style.opacity = marked ? 1 : 0.55;
+}
+function toggleMixBookmark() {
+  if (!mixCur.verb) return;
+  toggleStar(mixCur.verb);   // 통합 ⭐: 동사면 암기·て형·활용·시제·섞어서 모두
+  updateMixBookmarkBtn();
+}
+function handleMixReviewCorrect() {
+  const k = vkey(mixCur.verb), it = mixReview[k];
+  if (it && !it.m) { delete mixReview[k]; saveMixReview(); }
+  mixReviewQueue = mixReviewQueue.filter(x => x !== k);
+  updateReviewBadge();
+}
+function handleMixReviewWrong() {
+  const k = vkey(mixCur.verb);
+  if (mixReview[k] && !mixReviewQueue.includes(k)) mixReviewQueue.push(k);
+}
+function openMixReview() { renderMixReviewList(); document.getElementById('modal-mix-review').classList.add('open'); }
+function renderMixReviewList() {
+  const keys = Object.keys(mixReview);
+  const list = document.getElementById('mix-review-list');
+  const startBtn = document.getElementById('start-mix-review-btn');
+  if (!keys.length) {
+    list.innerHTML = '<div class="empty-msg">저장된 섞어서 복습이 없어요.<br>🔖로 저장하면 여기에 모입니다.</div>';
+    startBtn.style.display='none'; return;
+  }
+  startBtn.style.display='';
+  const rows = keys.map(k => ({ k, ...mixReview[k] })).sort((a,b) => (b.w - a.w) || (b.m - a.m));
+  list.innerHTML = rows.map(r => {
+    const tags=[]; if (r.m) tags.push(`<span class="rv-tag-mark">⭐ 저장</span>`);
+    return `<div class="review-row"><div>
+      <div class="rv-main">${ruby(r.v.dict.k, r.v.dict.h)} <span style="color:#888;font-weight:400">${r.v.meaning}</span></div>
+      <div class="rv-sub">🎲 활용+표현 랜덤 출제 &nbsp;·&nbsp; ${tags.join(' &nbsp; ')}</div>
+    </div><button class="rv-del" onclick="removeMixReviewItem('${r.k}')" title="삭제">🗑️</button></div>`;
+  }).join('');
+}
+function removeMixReviewItem(k) { delete mixReview[k]; saveMixReview(); mixReviewQueue = mixReviewQueue.filter(x => x !== k); renderMixReviewList(); updateReviewBadge(); }
+function startMixReview() {
+  const keys = Object.keys(mixReview);
+  if (!keys.length) return;
+  mixReviewQueue = shuffle(keys.slice());
+  mixReviewMode = true;
+  closeModal('modal-mix-review');
+  document.getElementById('mix-review-banner').classList.add('on');
+  document.getElementById('mix-progress').style.display = 'none';
+  newMixQuestion();
+}
+function newMixReviewQuestion() {
+  let k = null;
+  while (mixReviewQueue.length) { const c = mixReviewQueue.shift(); if (mixReview[c]) { k = c; break; } }
+  if (!k) { exitMixReview(true); return; }
+  const targets = mixTargets();
+  if (!targets.length) { exitMixReview(false); alert('설정에서 활용형·표현을 최소 1개 켜주세요.'); return; }
+  document.getElementById('mix-review-banner-text').textContent = `🎲 섞어서 복습 · 남은 ${mixReviewQueue.length + 1}개`;
+  renderMix(mixReview[k].v, rand(targets));   // 단어 단위 → 매 출제 활용/표현 랜덤
+}
+function exitMixReview(completed) {
+  mixReviewMode = false; mixReviewQueue = [];
+  document.getElementById('mix-review-banner').classList.remove('on');
+  if (completed) { const left = Object.keys(mixReview).length; alert(`섞어서 복습 완료! 🎉\n다음 복습 대상 ${left}개 남음.`); }
+  newMixQuestion();
 }
 
 document.querySelectorAll('.modal-overlay').forEach(el => {
