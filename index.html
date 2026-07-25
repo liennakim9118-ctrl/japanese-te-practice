@@ -908,6 +908,9 @@ const CONJ_FORMS = [
   { id:'tari',      label:'열거 (~たり)',          nuance:'~하기도 하고' },
   { id:'nakunaru',  label:'변화 부정 (~なくなる)',   nuance:'~하지 않게 되다' },
   { id:'youni',     label:'변화 (~ようになる)',     nuance:'~하게 되다' },
+  { id:'kiru',      label:'완수 (~きる)',          nuance:'끝까지 다 ~하다' },
+  { id:'kireru',    label:'완수 가능 (~きれる)',    nuance:'다 ~할 수 있다' },
+  { id:'kirenai',   label:'완수 불가 (~きれない)',  nuance:'도저히 다 ~할 수 없다' },
 ];
 const E_ROW = {'う':'え','く':'け','ぐ':'げ','す':'せ','つ':'て','ぬ':'ね','ぶ':'べ','む':'め','る':'れ'};
 const O_ROW = {'う':'お','く':'こ','ぐ':'ご','す':'そ','つ':'と','ぬ':'の','ぶ':'ぼ','む':'も','る':'ろ'};
@@ -935,6 +938,11 @@ function conjForm(verb, id) {
   // 변화 ~なる: 부정변화(ない형에서 い→くなる)·긍정변화(기본형+ようになる)
   if (id === 'nakunaru') return { k: verb.nai.k.slice(0,-1) + 'くなる', h: verb.nai.h.slice(0,-1) + 'くなる' };
   if (id === 'youni')    return { k: verb.dict.k + 'ようになる', h: verb.dict.h + 'ようになる' };
+  // 완수 ~きる 계열: ます형 어간(연용형) + きる/きれる/きれない
+  if (id === 'kiru' || id === 'kireru' || id === 'kirenai') {
+    const suf = { kiru:'きる', kireru:'きれる', kirenai:'きれない' }[id];
+    return { k: verb.masu.k.slice(0,-2) + suf, h: verb.masu.h.slice(0,-2) + suf };
+  }
   const dk = verb.dict.k, dh = verb.dict.h, g = verb.group;
   if (g === 3) {
     if (dh.endsWith('する')) {
