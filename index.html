@@ -430,8 +430,6 @@ ruby rt {
   <!-- Mode tabs -->
   <div class="mode-tabs">
     <button class="mode-tab active" id="tab-memo" onclick="setMode('memo')">암기</button>
-    <button class="mode-tab" id="tab-conj" onclick="setMode('conj')">활용</button>
-    <button class="mode-tab" id="tab-te" onclick="setMode('te')">표현</button>
     <button class="mode-tab" id="tab-mix" onclick="setMode('mix')">섞어서</button>
     <button class="mode-tab" id="tab-tense" onclick="setMode('tense')">시제</button>
   </div>
@@ -2285,10 +2283,14 @@ function exitReview(completed) {
 function setMode(m) {
   if (appMode === m) return;
   appMode = m;
-  ['te','memo','conj','mix','tense'].forEach(x => {
+  // 표시 탭은 암기·섞어서·시제 (활용·표현은 섞어서에 통합돼 탭 제거)
+  ['memo','mix','tense'].forEach(x => {
     document.getElementById('tab-' + x).classList.toggle('active', m === x);
     document.getElementById(x + '-view').style.display = (m === x) ? '' : 'none';
   });
+  // 숨긴 뷰(활용·표현)는 항상 감춤
+  document.getElementById('conj-view').style.display = 'none';
+  document.getElementById('te-view').style.display = 'none';
   updateReviewBadge();
   updateScoreDisplay();
   document.getElementById('add-btn').textContent = (m === 'memo') ? '＋ 표현' : '＋ 동사';
