@@ -1269,6 +1269,24 @@ if (!localStorage.getItem('jp_hidden_purge_v1')) {
   localStorage.setItem('jp_hidden_purge_v1', '1');
 }
 
+// 기존 ⭐ 별표를 시제·섞어서 복습에도 1회 채움 (두 목록이 나중에 추가돼 예전 별표가 빠져있던 문제)
+if (!localStorage.getItem('jp_star_sync_v3')) {
+  const itemMap = new Map([...allVerbs(), ...vocab].map(o => [vkey(o), o]));
+  const starred = new Set();
+  for (const L of [memoReview, review, conjReview, tenseReview, mixReview])
+    for (const [k, it] of Object.entries(L)) if (it && it.m && !hidden.has(k)) starred.add(k);
+  for (const k of starred) {
+    const o = itemMap.get(k); if (!o) continue;
+    const isVerb = !o.isVocab;
+    const ensure = L => { if (L[k]) L[k].m = true; else L[k] = { v:o, w:0, m:true }; };
+    ensure(memoReview);
+    if (isVerb) { ensure(review); ensure(conjReview); ensure(mixReview); }
+    if (tensePos(o)) ensure(tenseReview);
+  }
+  saveMemoReview(); saveReview(); saveConjReview(); saveTenseReview(); saveMixReview();
+  localStorage.setItem('jp_star_sync_v3', '1');
+}
+
 // 동사(내장·커스텀) 뜻·예문 수정값 오버라이드 (동사는 코드/별도 저장이라 편집분을 여기에 보관 후 로드 시 덮어씀)
 let itemOverrides = {};
 try { itemOverrides = JSON.parse(localStorage.getItem('jp_item_overrides') || '{}'); } catch(e) {}
