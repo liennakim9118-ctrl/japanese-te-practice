@@ -1357,6 +1357,10 @@ function checkAnswer() {
   rc.style.display = 'block';
 
   const teDisplay = ruby(verb.te.k, verb.te.h);
+  // 다중 읽기(回る=めぐる·まわる) 동사는 각 읽기의 정답을 병기
+  const seenTe = new Set(), teForms = [];
+  verbReadingVariants(verb).forEach(vr => { const kk = vr.te.k + target.suffix, hh = vr.te.h + target.suffix; if (!seenTe.has(hh+'|'+kk)) { seenTe.add(hh+'|'+kk); teForms.push({ k:kk, h:hh }); } });
+  const teAnsShow = teForms.map(a => ruby(a.k, a.h)).join('<span style="color:#bbb"> / </span>') || ruby(correctKanji, correctKana);
 
   if (ok) {
     stats.correct++;
@@ -1367,7 +1371,7 @@ function checkAnswer() {
     document.getElementById('result-title').className = 'result-title correct';
     document.getElementById('result-title').textContent = '✅ 정답!';
     document.getElementById('result-body').innerHTML =
-      `<div class="correct-answer">${ruby(correctKanji, correctKana)}</div>` +
+      `<div class="correct-answer">${teAnsShow}</div>` +
       `<div class="explanation">` +
         `기본형: <b>${ruby(verb.dict.k, verb.dict.h)}</b> (${verb.meaning})<br>` +
         `${ruby(verb.dict.k, verb.dict.h)}의 て형 → <b>${teDisplay}</b><br>` +
@@ -1385,7 +1389,7 @@ function checkAnswer() {
     document.getElementById('result-title').textContent = '❌ 오답';
     document.getElementById('result-body').innerHTML =
       `<div style="font-size:12px;color:#999;margin-bottom:2px">정답</div>` +
-      `<div class="correct-answer">${ruby(correctKanji, correctKana)}</div>` +
+      `<div class="correct-answer">${teAnsShow}</div>` +
       `<div class="explanation">` +
         `기본형: <b>${ruby(verb.dict.k, verb.dict.h)}</b> (${verb.meaning})<br>` +
         `${ruby(verb.dict.k, verb.dict.h)}의 て형 → <b>${teDisplay}</b><br>` +
@@ -2621,8 +2625,12 @@ function checkConjAnswer() {
 
   const rc = document.getElementById('conj-result');
   rc.style.display='block';
-  const answerHtml = `<div class="correct-answer">${ruby(ans.k, ans.h)}</div>` +
-    `<div class="explanation">${ruby(verb.dict.k, verb.dict.h)} (${verb.meaning}) 의 <b>${conjLabel(fid)}</b></div>`;
+  // 다중 읽기(回る=めぐる·まわる) 동사는 각 읽기 활용을 병기 (모두 정답)
+  const seen = new Set(), forms = [];
+  verbReadingVariants(verb).forEach(vr => { const a = conjForm(vr, fid); if (a && !seen.has(a.h+'|'+a.k)) { seen.add(a.h+'|'+a.k); forms.push(a); } });
+  const ansShow = forms.map(a => ruby(a.k, a.h)).join('<span style="color:#bbb"> / </span>') || ruby(ans.k, ans.h);
+  const answerHtml = `<div class="correct-answer">${ansShow}</div>` +
+    `<div class="explanation">${ruby(verb.dict.k, verb.dict.h)} (${verb.meaning}) 의 <b>${conjLabel(fid)}</b>${forms.length > 1 ? `<br><span style="color:#888;font-size:12px">읽기별로 모두 정답</span>` : ''}</div>`;
 
   if (ok) {
     conjStats.correct++; conjStats.streak++;
@@ -2853,7 +2861,11 @@ function checkTenseAnswer() {
   document.getElementById('tense-next').style.display='';
   const rc = document.getElementById('tense-result'); rc.style.display='block';
   const warn = tenseTrap(verb, cell);
-  const answerHtml = `<div class="correct-answer">${ruby(ans.k, ans.h)}</div>` +
+  // 다중 읽기 동사는 각 읽기의 정답을 병기
+  const seenT = new Set(), tForms = [];
+  variants.forEach(vr => { const a = tenseForm(vr, cell.tense, cell.polite); if (a && !seenT.has(a.h+'|'+a.k)) { seenT.add(a.h+'|'+a.k); tForms.push(a); } });
+  const tAnsShow = tForms.map(a => ruby(a.k, a.h)).join('<span style="color:#bbb"> / </span>') || ruby(ans.k, ans.h);
+  const answerHtml = `<div class="correct-answer">${tAnsShow}</div>` +
     `<div class="explanation">${ruby(verb.dict.k, verb.dict.h)} (${verb.meaning}) 의 <b>${tenseTargetLabel(cell)}</b>${warn ? `<span class="note-warn">${warn}</span>` : ''}</div>`;
   if (ok) {
     tenseStats.correct++; tenseStats.streak++;
@@ -3076,14 +3088,15 @@ function checkMixAnswer() {
   rc.style.display='block';
   const teDisplay = ruby(verb.te.k, verb.te.h);
   const korName = target.kind === 'conj' ? target.label.replace(/\s*\([^)]*\)\s*$/, '') : '';
+  // 정답 후보를 읽기 병기로 중복 없이 표시 (다중 읽기·형제활용 모두 정답임을 명시)
+  const seen = new Set();
+  const uniq = accept.filter(a => a && !seen.has(a.h + '|' + a.k) && seen.add(a.h + '|' + a.k));
+  const ansShow = uniq.map(a => ruby(a.k, a.h)).join('<span style="color:#bbb"> / </span>');
   const explHtml = target.kind === 'conj'
     ? `${ruby(verb.dict.k, verb.dict.h)} (${verb.meaning}) 의 <b>${target.label}</b>` +
-      (multi ? `<br><span style="color:#888;font-size:12px">${korName}은 ${sibs.map(s => s.suf).join(' · ')} 모두 정답</span>` : '')
+      (uniq.length > 1 ? `<br><span style="color:#888;font-size:12px">${korName}은 위 형태 모두 정답</span>` : '')
     : `${ruby(verb.dict.k, verb.dict.h)}의 て형 → <b>${teDisplay}</b><br>${target.expl(teDisplay)}`;
-  const ansShow = multi
-    ? sibs.map(s => ruby(s.ans.k, s.ans.h)).join('<span style="color:#bbb"> / </span>')
-    : ruby(ans.k, ans.h);
-  const answerHtml = `<div class="correct-answer">${ansShow}</div>` +
+  const answerHtml = `<div class="correct-answer">${ansShow || ruby(ans.k, ans.h)}</div>` +
     `<div class="explanation">${explHtml}${verb.note ? `<span class="note-warn">${verb.note}</span>` : ''}</div>`;
 
   if (ok) {
