@@ -1841,7 +1841,9 @@ function openItemDetail(key) {
   let h = `<h2 style="margin-bottom:2px">${ruby(v.dict.k, v.dict.h)}</h2>`;
   h += `<div style="font-size:12px;color:#888;margin-bottom:14px">${isVerb ? '동사' : posLabel(v.pos)}${o.del ? ' · 내가 추가' : ' · 내장'}</div>`;
   h += `<div class="section-title">수정</div>`;
-  if (!isVerb) h += `<div class="form-group"><label>읽기(히라가나)</label><input id="it-h" value="${esc(v.dict.h)}"></div>`;
+  // 내가 추가한 항목(o.del)은 표기(한자)·읽기까지 수정 가능 → 한자 등록/수정. 내장 항목은 뜻·예문만.
+  if (o.del) h += `<div class="form-group"><label>표기 (일본어 · 한자 가능)</label><input id="it-k" value="${esc(v.dict.k)}"></div>`;
+  if (o.del || !isVerb) h += `<div class="form-group"><label>읽기(히라가나)</label><input id="it-h" value="${esc(v.dict.h)}"></div>`;
   h += `<div class="form-group"><label>뜻 (필수)</label><input id="it-meaning" value="${esc(v.meaning)}" style="font-family:inherit"></div>`;
   h += `<div class="form-group"><label>예문 — 원문</label><input id="it-ex-jp" value="${esc(v.exJp)}" placeholder="今日はいい天気ですね。"></div>`;
   h += `<div class="form-group"><label>예문 — 해석</label><input id="it-ex-ko" value="${esc(v.exKo)}" placeholder="오늘은 날씨가 좋네요." style="font-family:inherit"></div>`;
@@ -1859,30 +1861,61 @@ function openItemDetail(key) {
   document.getElementById('item-detail-body').innerHTML = h;
   document.getElementById('modal-item').classList.add('open');
 }
+// 표기(키) 변경 시 키 기반 저장소 전부 이전 (복습 5종·통계·설정·오버라이드)
+function migrateItemKey(oldK, newK, newObj) {
+  for (const L of [memoReview, review, conjReview, tenseReview, mixReview]) {
+    if (L[oldK]) { L[newK] = { ...L[oldK], v: newObj }; delete L[oldK]; }
+  }
+  if (verbStats[oldK]) { verbStats[newK] = verbStats[oldK]; verbStats[newK].k = newObj.dict.k; delete verbStats[oldK]; }
+  if (itemOverrides[oldK]) { itemOverrides[newK] = itemOverrides[oldK]; delete itemOverrides[oldK]; }
+  if (disabledVerbs.has(oldK)) { disabledVerbs.delete(oldK); disabledVerbs.add(newK); localStorage.setItem('jp_disabled_verbs', JSON.stringify([...disabledVerbs])); }
+  if (hidden.has(oldK)) { hidden.delete(oldK); hidden.add(newK); localStorage.setItem('jp_hidden', JSON.stringify([...hidden])); }
+  saveMemoReview(); saveReview(); saveConjReview(); saveTenseReview(); saveMixReview(); saveVerbStats(); saveItemOverrides();
+}
 function saveItemEdit(key) {
   const g = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
   const meaning = g('it-meaning');
   if (!meaning) { alert('뜻은 필수예요.'); return; }
   const exJp = g('it-ex-jp'), exKo = g('it-ex-ko');
   const vo = vocab.find(x => vkey(x) === key);
-  if (vo) {   // 표현: 직접 수정
-    vo.dict.h = g('it-h') || vo.dict.k;
+  const cv = vo ? null : customVerbs.find(x => vkey(x) === key);
+  const isUserItem = !!(vo || cv);
+  const newK = isUserItem ? (g('it-k') || key) : key;   // 표기 변경(내가 추가한 항목만)
+  const newH = (vo || (cv !== null)) ? (g('it-h') || newK) : null;
+  // 표기 변경 시 중복 검사
+  if (newK !== key && [...allVerbs(), ...vocab].some(x => vkey(x) === newK)) {
+    alert(`'${newK}' 는 이미 목록에 있어요. 다른 표기를 쓰거나 기존 항목을 수정하세요.`); return;
+  }
+  if (vo) {   // 표현: 직접 수정 (+표기/읽기 변경 가능)
+    vo.dict.k = newK; vo.dict.h = newH || newK;
     vo.meaning = meaning; vo.exJp = exJp; vo.exKo = exKo;
     const pos = g('it-pos');
     if (pos) vo.pos = pos; else delete vo.pos;
     saveVocab();
-    if (memoReview[key]) { memoReview[key].v = vo; saveMemoReview(); }
-  } else {    // 동사(내장·커스텀): 오버라이드로 보관 후 적용
+    if (newK !== key) migrateItemKey(key, newK, vo);
+    else if (memoReview[key]) { memoReview[key].v = vo; saveMemoReview(); }
+  } else if (cv) {   // 커스텀 동사: 표기/읽기 바뀌면 활용형 재생성
+    const c = conjugate(newH, newK, cv.group || 'auto');
+    if (!c || c.dict.k.slice(-1) !== c.dict.h.slice(-1)) {
+      alert('표기와 읽기의 끝 글자가 맞아야 해요. (예: 並べる ↔ ならべる)'); return;
+    }
+    Object.assign(cv, { dict:c.dict, masu:c.masu, nai:c.nai, ta:c.ta, te:c.te, group:c.group, meaning, exJp: exJp || undefined, exKo: exKo || undefined });
+    localStorage.setItem('jp_custom_verbs', JSON.stringify(customVerbs));
+    if (newK !== key) migrateItemKey(key, newK, cv);
+    else for (const L of [memoReview, review, conjReview, tenseReview, mixReview]) if (L[key]) L[key].v = cv;
+    saveMemoReview(); saveReview(); saveConjReview(); saveTenseReview(); saveMixReview();
+  } else {    // 내장 동사: 오버라이드로 뜻·예문만
     itemOverrides[key] = { meaning, exJp, exKo };
     saveItemOverrides();
     applyItemOverrides();
     const vObj = allVerbs().find(x => vkey(x) === key);
-    for (const L of [memoReview, review, conjReview]) if (L[key] && vObj) L[key].v = vObj;
-    saveMemoReview(); saveReview(); saveConjReview();
+    for (const L of [memoReview, review, conjReview, tenseReview, mixReview]) if (L[key] && vObj) L[key].v = vObj;
+    saveMemoReview(); saveReview(); saveConjReview(); saveTenseReview(); saveMixReview();
   }
   vocabDirty = true; verbSetDirty = true;
+  updateReviewBadge();
   renderVocabList();
-  openItemDetail(key);   // 시트 갱신
+  openItemDetail(newK);   // 시트 갱신(변경된 키로)
 }
 // 표현 항목 품사 지정 (목록에서 인라인). 지정 시 시제·문형 연습에 자동 편입
 function setVocabPos(key, pos) {
@@ -2439,9 +2472,11 @@ function checkMemoAnswer() {
   const user = norm(inp.value);
   if (!user) { inp.focus(); return; }
   const { verb, dir } = memoCur;
+  // 한→일: 표기·읽기를 콤마/가운뎃점 등으로 나눈 각 후보를 모두 정답 인정 (回る=めぐる·まわる)
+  const jpCands = [verb.dict.h, verb.dict.k].flatMap(s => (s||'').split(/[,，、・/]/)).map(x => norm(x.trim())).filter(Boolean);
   const ok = dir === 'jp2ko'
     ? matchMeaning(inp.value, verb.meaning)
-    : (user === norm(verb.dict.h) || user === norm(verb.dict.k));
+    : jpCands.includes(user);
 
   memoStats.total++;
   bumpVerbStat(verb, ok);
