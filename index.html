@@ -1844,6 +1844,10 @@ function openItemDetail(key) {
   // 내가 추가한 항목(o.del)은 표기(한자)·읽기까지 수정 가능 → 한자 등록/수정. 내장 항목은 뜻·예문만.
   if (o.del) h += `<div class="form-group"><label>표기 (일본어 · 한자 가능)</label><input id="it-k" value="${esc(v.dict.k)}"></div>`;
   if (o.del || !isVerb) h += `<div class="form-group"><label>읽기(히라가나)</label><input id="it-h" value="${esc(v.dict.h)}"></div>`;
+  // 커스텀 동사: 그룹 교정(잘못 분류된 경우 바로잡기 → 활용형 재생성)
+  if (o.del === 'verb') h += `<div class="form-group"><label>동사 그룹 (잘못됐으면 고치세요)</label><select id="it-group">
+    ${[[1,'1그룹 (う동사)'],[2,'2그룹 (る동사)'],[3,'3그룹 (する·くる)']].map(([g,l]) => `<option value="${g}" ${(v.group===g)?'selected':''}>${l}</option>`).join('')}
+  </select></div>`;
   h += `<div class="form-group"><label>뜻 (필수)</label><input id="it-meaning" value="${esc(v.meaning)}" style="font-family:inherit"></div>`;
   h += `<div class="form-group"><label>예문 — 원문</label><input id="it-ex-jp" value="${esc(v.exJp)}" placeholder="今日はいい天気ですね。"></div>`;
   h += `<div class="form-group"><label>예문 — 해석</label><input id="it-ex-ko" value="${esc(v.exKo)}" placeholder="오늘은 날씨가 좋네요." style="font-family:inherit"></div>`;
@@ -1894,8 +1898,10 @@ function saveItemEdit(key) {
     saveVocab();
     if (newK !== key) migrateItemKey(key, newK, vo);
     else if (memoReview[key]) { memoReview[key].v = vo; saveMemoReview(); }
-  } else if (cv) {   // 커스텀 동사: 표기/읽기 바뀌면 활용형 재생성
-    const c = conjugate(newH, newK, cv.group || 'auto');
+  } else if (cv) {   // 커스텀 동사: 표기/읽기/그룹 바뀌면 활용형 재생성
+    const grpSel = g('it-group');
+    const grp = grpSel ? Number(grpSel) : (cv.group || 'auto');
+    const c = conjugate(newH, newK, grp);
     if (!c || c.dict.k.slice(-1) !== c.dict.h.slice(-1)) {
       alert('표기와 읽기의 끝 글자가 맞아야 해요. (예: 並べる ↔ ならべる)'); return;
     }
