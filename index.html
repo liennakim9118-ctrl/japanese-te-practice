@@ -1483,10 +1483,15 @@ const G1_END = {
   'る':{masu:'ります',nai:'らない',ta:'った',te:'って'},
 };
 
-function detectGroup(h) {
+function detectGroup(h, k) {
   if (h === 'する' || (h.length > 2 && h.endsWith('する'))) return 3;
   if (h === 'くる' || h === '来る') return 3;
   if (!h.endsWith('る')) return 1;
+  // 한자 표기의 오쿠리가나가 い/え단이면 2그룹(一段) 강한 신호 → 예외목록보다 우선 (変え-る 2그룹 vs 帰る 1그룹)
+  if (k && k !== h && k.endsWith('る')) {
+    const kPrev = k.slice(-2, -1);
+    if (ROW_I.has(kPrev) || ROW_E.has(kPrev)) return 2;   // 変える·食べる·見える…
+  }
   const prev = h.slice(-2, -1);
   if ((ROW_I.has(prev) || ROW_E.has(prev)) && !G1_RU.has(h)) return 2;
   return 1;
@@ -1496,7 +1501,7 @@ function detectGroup(h) {
 function conjugate(dictH, dictK, groupOpt) {
   if (!dictH) return null;
   dictK = dictK || dictH;
-  const group = (groupOpt && groupOpt !== 'auto') ? Number(groupOpt) : detectGroup(dictH);
+  const group = (groupOpt && groupOpt !== 'auto') ? Number(groupOpt) : detectGroup(dictH, dictK);
   const kStem = dictK.slice(0, -1), hStem = dictH.slice(0, -1);
   const mk = end => ({ k: kStem + end, h: hStem + end });
   let masu, nai, ta, te;
