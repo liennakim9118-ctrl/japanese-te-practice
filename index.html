@@ -1127,6 +1127,8 @@ function saveMixReview() { localStorage.setItem('jp_mix_review', JSON.stringify(
 let mixReviewMode = false, mixReviewQueue = [];
 // 섞어서 일반 연습 라운드: 전체 동사를 한 바퀴씩, 오답은 맞힐 때까지 반복
 let mixRoundQueue = [], mixRoundTotal = 0, mixRoundCurKey = null, mixRoundStarted = false, mixRoundSig = '';
+// 오답 재출제용: 동사키 → 틀렸던 형태(target). 재출제 시 그 형태 그대로 다시 냄
+let mixWrongTargets = {};
 
 // 구버전(동사+형태별) 복습 데이터를 단어 단위로 통합 마이그레이션
 function migrateReviewWordLevel(obj) {
@@ -3109,7 +3111,7 @@ function newMixQuestion() {
   // 라운드: 전체 동사를 한 바퀴씩. 구성이 바뀌면 새 라운드
   const map = new Map(pool.map(v => [vkey(v), v]));
   const sig = [...map.keys()].join('|');
-  if (sig !== mixRoundSig) { mixRoundSig = sig; mixRoundQueue = []; mixRoundStarted = false; }
+  if (sig !== mixRoundSig) { mixRoundSig = sig; mixRoundQueue = []; mixRoundStarted = false; mixWrongTargets = {}; }
   let key = null;
   while (mixRoundQueue.length) { const c = mixRoundQueue.shift(); if (map.has(c)) { key = c; break; } }
   if (!key) {
@@ -3117,11 +3119,19 @@ function newMixQuestion() {
     mixRoundQueue = shuffle(pool.map(vkey));
     mixRoundTotal = mixRoundQueue.length;
     mixRoundStarted = true;
+    mixWrongTargets = {};   // 새 라운드는 형태 다시 랜덤부터
     key = mixRoundQueue.shift();
   }
   mixRoundCurKey = key;
-  renderMix(map.get(key), rand(targets));   // 동사는 라운드 순서, 목표(활용/표현)는 매번 랜덤
+  renderMix(map.get(key), pickMixTarget(key, targets));   // 오답 재출제면 틀린 형태 그대로, 아니면 랜덤
   updateMixProgress();
+}
+// 오답으로 재출제되는 동사면 틀렸던 형태 그대로, 아니면 랜덤 (저장 형태가 현재 대상에 없으면 랜덤)
+function pickMixTarget(key, targets) {
+  const saved = mixWrongTargets[key];
+  delete mixWrongTargets[key];
+  if (saved && targets.some(t => t.kind === saved.kind && t.id === saved.id)) return saved;
+  return rand(targets);
 }
 // 상단 진행 표시: 이번 라운드 남은 개수(현재 문제 포함) / 전체
 function updateMixProgress() {
@@ -3131,9 +3141,11 @@ function updateMixProgress() {
   el.style.display = '';
   el.textContent = `📚 이번 라운드 남은 ${mixRoundQueue.length + 1} / 전체 ${mixRoundTotal}개`;
 }
-// 일반 라운드에서 틀리면: 이번 라운드 큐 뒤에 다시 넣어 맞힐 때까지 재출제
+// 일반 라운드에서 틀리면: 틀린 형태를 기억하고 큐 뒤에 다시 넣어 맞힐 때까지 재출제(같은 형태로)
 function handleMixRoundWrong() {
-  if (mixRoundCurKey && !mixRoundQueue.includes(mixRoundCurKey)) mixRoundQueue.push(mixRoundCurKey);
+  if (!mixRoundCurKey) return;
+  if (mixCur.target) mixWrongTargets[mixRoundCurKey] = mixCur.target;
+  if (!mixRoundQueue.includes(mixRoundCurKey)) mixRoundQueue.push(mixRoundCurKey);
 }
 function renderMix(verb, target) {
   mixCur = { verb, target };
@@ -3251,6 +3263,7 @@ function handleMixReviewCorrect() {
 }
 function handleMixReviewWrong() {
   const k = vkey(mixCur.verb);
+  if (mixCur.target) mixWrongTargets[k] = mixCur.target;   // 복습도 틀린 형태 그대로 재출제
   if (mixReview[k] && !mixReviewQueue.includes(k)) mixReviewQueue.push(k);
 }
 function openMixReview() { renderMixReviewList(); document.getElementById('modal-mix-review').classList.add('open'); }
@@ -3277,6 +3290,7 @@ function startMixReview() {
   const keys = Object.keys(mixReview);
   if (!keys.length) return;
   mixReviewQueue = shuffle(keys.slice());
+  mixWrongTargets = {};   // 복습 시작은 형태 랜덤부터
   mixReviewMode = true;
   closeModal('modal-mix-review');
   document.getElementById('mix-review-banner').classList.add('on');
@@ -3290,7 +3304,7 @@ function newMixReviewQuestion() {
   const targets = mixTargets();
   if (!targets.length) { exitMixReview(false); alert('설정에서 활용형·표현을 최소 1개 켜주세요.'); return; }
   document.getElementById('mix-review-banner-text').textContent = `🎲 섞어서 복습 · 남은 ${mixReviewQueue.length + 1}개`;
-  renderMix(mixReview[k].v, rand(targets));   // 단어 단위 → 매 출제 활용/표현 랜덤
+  renderMix(mixReview[k].v, pickMixTarget(k, targets));   // 오답 재출제면 틀린 형태 그대로, 아니면 랜덤
 }
 function exitMixReview(completed) {
   mixReviewMode = false; mixReviewQueue = [];
