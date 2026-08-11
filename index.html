@@ -2877,8 +2877,14 @@ function tenseForm(v, tense, polite) {
     return P ? { k: stemK+'かったです', h: stemH+'かったです' } : { k: stemK+'かった', h: stemH+'かった' };
   }
   // noun / naadj
-  if (tense === 'nonpast') return P ? { k:k+'です', h:h+'です' } : { k:k+'だ', h:h+'だ' };
-  return P ? { k:k+'でした', h:h+'でした' } : { k:k+'だった', h:h+'だった' };
+  // な형용사 사전형에 だ가 포함돼 있으면(예: 空っぽだ) 어간에서 제거 → だ 중복 방지
+  let sk = k, sh = h;
+  if (pos === 'naadj') {
+    if (sk.endsWith('だ')) sk = sk.slice(0, -1);
+    if (sh.endsWith('だ')) sh = sh.slice(0, -1);
+  }
+  if (tense === 'nonpast') return P ? { k:sk+'です', h:sh+'です' } : { k:sk+'だ', h:sh+'だ' };
+  return P ? { k:sk+'でした', h:sh+'でした' } : { k:sk+'だった', h:sh+'だった' };
 }
 function tenseTrap(v, c) {
   const pos = tensePos(v);
